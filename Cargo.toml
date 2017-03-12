@@ -1,0 +1,15 @@
+[package]
+name = "iron-arrow"
+version = "0.1.0"
+authors = ["Jihoon Son <jihoonson@apache.org>"]
+licence = "Apache-2.0"
+
+[lib]
+name = "arrow"
+path = "src/lib.rs"
+
+[dependencies]
+libc = "0.2.11"
+
+[build-dependencies]
+gcc = "0.3.28"
