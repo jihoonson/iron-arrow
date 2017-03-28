@@ -1,5 +1,4 @@
 use std::ops::Index;
-use std::mem;
 
 use array;
 
@@ -19,13 +18,13 @@ pub enum Ty {
   Bool,
 
   // Little-endian integer types
-  Uint8,
+  UInt8,
   Int8,
-  Uint16,
+  UInt16,
   Int16,
-  Uint32,
+  UInt32,
   Int32,
-  Uint64,
+  UInt64,
   Int64,
 
   // 2-byte floating point value
@@ -44,229 +43,57 @@ pub enum Ty {
   Binary,
 
   // int64_t milliseconds since the UNIX epoch
-  Date,
+  Date64,
 
   // int32_t days since the UNIX epoch
   Date32,
 
   // Exact timestamp encoded with int64 since UNIX epoch
   // Default unit millisecond
-  Timestamp { unit: TimeUnit },
+  Timestamp,
 
-  // Exact time encoded with int64, default unit millisecond
-  Time { unit: TimeUnit },
+  // Time as signed 32-bit integer, representing either seconds or
+  // milliseconds since midnight
+  Time32,
+
+  // Time as signed 64-bit integer, representing either microseconds or
+  // nanoseconds since midnight
+  Time64,
 
   // YEAR_MONTH or DAY_TIME interval in SQL style
-  Interval { unit: TimeUnit },
+  Interval,
 
   // Precision- and scale-based decimal type. Storage type depends on the
   // parameters.
-  Decimal { precision: i32, scale: i32 },
+  Decimal,
 
   // A list of some logical data type
-  List { field: Box<Field> },
+  List,
 
   // Struct of logical types
-  Struct { children: Vec<Field> },
+  Struct,
 
   // Unions of logical types
-  Union { mode: UnionMode, children: Vec<Box<Field>> },
+  Union,
 
   // Dictionary aka Category type
-  Dictionary { index_type: Box<Ty>, dictionary: array::Array }
-}
-
-impl Ty {
-  pub fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-    match self {
-      &Ty::Null => vec![],
-      &Ty::Bool => vec![K_VALIDITY_BUFFER, K_VALUES_1],
-      &Ty::Uint8 => vec![K_VALIDITY_BUFFER, K_VALUES_8],
-      &Ty::Int8 => vec![K_VALIDITY_BUFFER, K_VALUES_8],
-      &Ty::Uint16 => vec![K_VALIDITY_BUFFER, K_VALUES_16],
-      &Ty::Int16 => vec![K_VALIDITY_BUFFER, K_VALUES_16],
-      &Ty::Uint32 => vec![K_VALIDITY_BUFFER, K_VALUES_32],
-      &Ty::Int32 => vec![K_VALIDITY_BUFFER, K_VALUES_32],
-      &Ty::Uint64 => vec![K_VALIDITY_BUFFER, K_VALUES_64],
-      &Ty::Int64 => vec![K_VALIDITY_BUFFER, K_VALUES_64],
-      &Ty::HalfFloat => vec![K_VALIDITY_BUFFER, K_VALUES_16],
-      &Ty::Float => vec![K_VALIDITY_BUFFER, K_VALUES_32],
-      &Ty::Double => vec![K_VALIDITY_BUFFER, K_VALUES_64],
-      &Ty::String => vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8],
-      &Ty::Binary => vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8],
-      &Ty::Date => vec![K_VALIDITY_BUFFER, K_VALUES_64],
-      &Ty::Date32 => vec![K_VALIDITY_BUFFER, K_VALUES_32],
-      &Ty::Timestamp { unit: ref unit } => vec![K_VALIDITY_BUFFER, K_VALUES_64],
-      &Ty::Time { unit: ref unit } => vec![K_VALIDITY_BUFFER, K_VALUES_64],
-      &Ty::Interval { unit: ref unit } => vec![K_VALIDITY_BUFFER, K_VALUES_64],
-      &Ty::Decimal { precision: precision, scale: scale } => vec![], // TODO
-      &Ty::List { field: ref field } => vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER],
-      &Ty::Struct { children: ref children } => vec![K_VALIDITY_BUFFER],
-      &Ty::Union { mode: ref mode, children: ref children } => {
-        match mode {
-          &UnionMode::SPARSE => vec![K_VALIDITY_BUFFER, K_TYPE_BUFFER],
-          &UnionMode::DENSE => vec![K_VALIDITY_BUFFER, K_TYPE_BUFFER, K_OFFSET_BUFFER],
-          _ => panic!()
-        }
-      },
-      &Ty::Dictionary { index_type: ref index_type, dictionary: ref dictionary } => vec![K_VALIDITY_BUFFER, Ty::get_buffer_desc(index_type.bit_width()) ],
-      _ => panic!() // TODO: unknown type error
-    }
-  }
-
-  fn get_buffer_desc(bit_width: i32) -> &'static BufferDesc {
-    match bit_width {
-      1 => K_VALUES_1,
-      8 => K_VALUES_8,
-      16 => K_VALUES_16,
-      32 => K_VALUES_32,
-      64 => K_VALUES_64,
-      _ => panic!()
-    }
-  }
-
-  pub fn get_name(&self) -> &'static str {
-    match self {
-      &Ty::Null => "null",
-      &Ty::Bool => "bool",
-      &Ty::Uint8 => "uint8",
-      &Ty::Int8 => "int8",
-      &Ty::Uint16 => "uint16",
-      &Ty::Int16 => "int16",
-      &Ty::Uint32 => "uint32",
-      &Ty::Int32 => "int32",
-      &Ty::Uint64 => "uint64",
-      &Ty::Int64 => "int64",
-      &Ty::HalfFloat => "halffloat",
-      &Ty::Float => "float",
-      &Ty::Double => "double",
-      &Ty::String => "utf8",
-      &Ty::Binary => "binary",
-      &Ty::Date => "date",
-      &Ty::Date32 => "date32",
-      &Ty::Timestamp { unit: ref unit } => "timestamp",
-      &Ty::Time { unit: ref unit } => "time",
-      &Ty::Interval { unit: ref unit } => "interval",
-      &Ty::Decimal { precision: precision, scale: scale } => "decimal",
-      &Ty::List { field: ref field } => "list",
-      &Ty::Struct { children: ref children } => "struct",
-      &Ty::Union { mode: ref mode, children: ref children } => "union",
-      &Ty::Dictionary { index_type: ref index_type, dictionary: ref dictionary } => "dictionary",
-      _ => panic!()
-    }
-  }
-
-  pub fn bit_width(&self) -> i32 {
-    match self {
-      &Ty::Bool => 1,
-      &Ty::Uint8 => 8,
-      &Ty::Int8 => 8,
-      &Ty::Uint16 => 16,
-      &Ty::Int16 => 16,
-      &Ty::Uint32 => 32,
-      &Ty::Int32 => 32,
-      &Ty::Uint64 => 64,
-      &Ty::Int64 => 64,
-      &Ty::HalfFloat => 16,
-      &Ty::Float => 32,
-      &Ty::Double => 64,
-      &Ty::Date => 64,
-      &Ty::Date32 => 32,
-      &Ty::Timestamp { unit: ref unit } => 64,
-      &Ty::Time { unit: ref unit } => 64,
-      &Ty::Interval { unit: ref unit } => 64,
-      &Ty::Dictionary { index_type: ref index_type, dictionary: ref dictionary } => index_type.bit_width(),
-      _ => panic!() // TODO: not supported error
-    }
-  }
-
-  pub fn is_fixed_type(&self) -> bool {
-    match self {
-      &Ty::Bool => true,
-      &Ty::Uint8 => true,
-      &Ty::Int8 => true,
-      &Ty::Uint16 => true,
-      &Ty::Int16 => true,
-      &Ty::Uint32 => true,
-      &Ty::Int32 => true,
-      &Ty::Uint64 => true,
-      &Ty::Int64 => true,
-      &Ty::HalfFloat => true,
-      &Ty::Float => true,
-      &Ty::Double => true,
-      &Ty::Date => true,
-      &Ty::Date32 => true,
-      &Ty::Timestamp { unit: ref unit } => true,
-      &Ty::Time { unit: ref unit } => true,
-      &Ty::Interval { unit: ref unit } => true,
-      &Ty::Dictionary { index_type: ref index_type, dictionary: ref dictionary } => true,
-      _ => false // TODO: not supported error
-    }
-  }
-
-  pub fn is_nested_type(&self) -> bool {
-    match self {
-      &Ty::Struct { children: ref children } => true,
-      &Ty::Union { mode: ref mode, children: ref children } => true,
-      _ => false // TODO: not supported error
-    }
-  }
-
-  pub fn child(&self, i: usize) -> &Field {
-    unimplemented!()
-  }
-
-  pub fn get_children(&self) -> &Vec<Field> {
-    unimplemented!()
-  }
-
-  pub fn num_children(&self) -> i32 {
-    unimplemented!()
-  }
-
-  pub fn is_signed(&self) -> bool {
-    unimplemented!()
-  }
-
-  pub fn precision(&self) -> Precision {
-    unimplemented!()
-  }
-
-  pub fn value_field_from_list_type(&self) -> &Field {
-    match self {
-      &Ty::List { field: ref field } => field,
-      _ => panic!()
-    }
-  }
-
-  pub fn value_type_from_list_type(&self) -> &Ty {
-    match self {
-      &Ty::List { field: ref field } => field.get_type(),
-      _ => panic!()
-    }
-  }
-}
-
-impl ToString for Ty {
-  fn to_string(&self) -> String {
-    String::from(self.get_name())
-  }
+  Dictionary
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum TimeUnit {
-  SECOND,
-  MILLI,
-  MICRO,
-  NANO
+  Second,
+  Milli,
+  Micro,
+  Nano
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum BufferType {
-  DATA,
-  OFFSET,
-  TYPE,
-  VALIDITY
+  Data,
+  Offset,
+  Type,
+  Validity
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -277,29 +104,29 @@ pub struct BufferDesc {
 
 // TODO: pub?
 pub static K_VALIDITY_BUFFER: &'static BufferDesc = &BufferDesc {
-  ty: BufferType::VALIDITY,
+  ty: BufferType::Validity,
   bit_width: 1
 };
 
 pub static K_OFFSET_BUFFER: &'static BufferDesc = &BufferDesc {
-  ty: BufferType::OFFSET,
+  ty: BufferType::Offset,
   bit_width: 32
 };
 
 pub static K_TYPE_BUFFER: &'static BufferDesc = &BufferDesc {
-  ty: BufferType::TYPE,
+  ty: BufferType::Type,
   bit_width: 32
 };
 
 pub static K_VALUES_1: &'static BufferDesc = &BufferDesc {
-  ty: BufferType::DATA,
+  ty: BufferType::Data,
   bit_width: 1
 };
 
 macro_rules! define_buffer_desc {
   ($name: ident, $width: expr) => (
     pub static $name: &'static BufferDesc = &BufferDesc{
-      ty: BufferType::DATA,
+      ty: BufferType::Data,
       bit_width: $width
     };
   );
@@ -310,53 +137,820 @@ define_buffer_desc!(K_VALUES_16, 16);
 define_buffer_desc!(K_VALUES_32, 32);
 define_buffer_desc!(K_VALUES_64, 64);
 
-//pub trait VisitType {
-//  // TODO
-//}
-
-//pub trait AcceptVisitor {
-//  fn accept(&self, visit_type: &VisitType);
-//}
+fn get_data_buffer_desc(bit_width: i32) -> &'static BufferDesc {
+  match bit_width {
+    1 => K_VALUES_1,
+    8 => K_VALUES_8,
+    16 => K_VALUES_16,
+    32 => K_VALUES_32,
+    64 => K_VALUES_64,
+    _ => panic!()
+  }
+}
 
 // Required to implement this trait for every data types
-pub trait Typed {
-  fn get_type(&self) -> Ty;
-  fn get_buffer_layout(&self) -> Vec<&BufferDesc>;
-  fn get_name(&self) -> &'static str;
+pub trait ArrowType {
+  fn get_type(&self) -> &Ty;
+  fn get_buffer_layout(&self) -> &Vec<&BufferDesc>;
+  fn get_name(&self) -> &String;
 }
 
 // Required to implement this trait for structured data types
-pub trait NestedTyped {
+pub trait NestedType {
   fn child(&self, i: usize) -> &Field;
   fn get_children(&self) -> &Vec<Field>;
   fn num_children(&self) -> i32;
 }
 
 // Required to implement this trait for fixed-size data types
-pub trait FixedWidth {
+pub trait FixedWidthType {
   fn get_bit_width(&self) -> i32;
 }
 
-// Required to implement this trait for integer data types
-pub trait IntegerTyped {
-  fn is_signed(&self) -> bool;
+#[derive(Debug, Eq, PartialEq)]
+pub enum DataType {
+  NullType { type_info: NullType },
+
+  BooleanType { type_info: BooleanType },
+
+  Int8Type { type_info: IntegerType },
+  Int16Type { type_info: IntegerType },
+  Int32Type { type_info: IntegerType },
+  Int64Type { type_info: IntegerType },
+  UInt8Type { type_info: IntegerType },
+  UInt16Type { type_info: IntegerType },
+  UInt32Type { type_info: IntegerType },
+  UInt64Type { type_info: IntegerType },
+
+  HalfFloatType { type_info: FloatingPointType },
+  FloatType { type_info: FloatingPointType },
+  DoubleType { type_info: FloatingPointType },
+
+  BinaryType { type_info: BinaryType },
+  StringType { type_info: StringType },
+
+  Date32Type { type_info: Date32Type },
+  Date64Type { type_info: Date64Type },
+  Time32Type { type_info: Time32Type },
+  Time64Type { type_info: Time64Type },
+  TimestampType { type_info: TimestampType },
+  IntervalType { type_info: IntervalType },
+
+  DecimalType { type_info: DecimalType },
+  ListType { type_info: ListType },
+  StructType { type_info: StructType },
+  UnionType { type_info: UnionType },
+  DictionaryType { type_info: DictionaryType }
 }
+
+macro_rules! as_type_info {
+    ($method_name: ident, $type_info: ty, $data_type: path) => {
+      pub fn $method_name(&self) -> &$type_info {
+        match self {
+          &$data_type { type_info: ref type_info } => type_info,
+          _ => panic!()
+        }
+      }
+    };
+}
+
+impl DataType {
+  pub fn null() -> DataType {
+    DataType::NullType { type_info: NullType::new() }
+  }
+
+  pub fn boolean() -> DataType {
+    DataType::BooleanType { type_info: BooleanType::new() }
+  }
+
+  pub fn int8() -> DataType {
+    DataType::Int8Type { type_info: IntegerType::int8() }
+  }
+
+  pub fn int16() -> DataType {
+    DataType::Int16Type { type_info: IntegerType::int16() }
+  }
+
+  pub fn int32() -> DataType {
+    DataType::Int32Type { type_info: IntegerType::int32() }
+  }
+
+  pub fn int64() -> DataType {
+    DataType::Int64Type { type_info: IntegerType::int64() }
+  }
+
+  pub fn uint8() -> DataType {
+    DataType::UInt8Type { type_info: IntegerType::uint8() }
+  }
+
+  pub fn uint16() -> DataType {
+    DataType::UInt16Type { type_info: IntegerType::uint16() }
+  }
+
+  pub fn uint32() -> DataType {
+    DataType::UInt32Type { type_info: IntegerType::uint32() }
+  }
+
+  pub fn uint64() -> DataType {
+    DataType::UInt64Type { type_info: IntegerType::uint64() }
+  }
+
+  pub fn half_float() -> DataType {
+    DataType::HalfFloatType { type_info: FloatingPointType::half_float() }
+  }
+
+  pub fn float() -> DataType {
+    DataType::FloatType { type_info: FloatingPointType::float() }
+  }
+
+  pub fn double() -> DataType {
+    DataType::DoubleType { type_info: FloatingPointType::double() }
+  }
+
+  pub fn binary() -> DataType {
+    DataType::BinaryType { type_info: BinaryType::new() }
+  }
+
+  pub fn string() -> DataType {
+    DataType::StringType { type_info: StringType::new() }
+  }
+
+  pub fn date32() -> DataType {
+    DataType::Date32Type { type_info: Date32Type::new() }
+  }
+
+  pub fn date64() -> DataType {
+    DataType::Date64Type { type_info: Date64Type::new() }
+  }
+
+  pub fn time32() -> DataType {
+    DataType::Time32Type { type_info: Time32Type::new(TimeUnit::Milli) }
+  }
+
+  pub fn time32_with(unit: TimeUnit) -> DataType {
+    DataType::Time32Type { type_info: Time32Type::new(unit) }
+  }
+
+  pub fn time64() -> DataType {
+    DataType::Time64Type { type_info: Time64Type::new(TimeUnit::Milli) }
+  }
+
+  pub fn time64_with(unit: TimeUnit) -> DataType {
+    DataType::Time64Type { type_info: Time64Type::new(unit) }
+  }
+
+  pub fn timestamp() -> DataType {
+    DataType::TimestampType { type_info: TimestampType::new(TimeUnit::Milli, "")}
+  }
+
+  pub fn timestamp_with(unit: TimeUnit) -> DataType {
+    DataType::TimestampType { type_info: TimestampType::new(unit, "") }
+  }
+
+  pub fn timestamp_for(unit: TimeUnit, timezone: &'static str) -> DataType {
+    DataType::TimestampType { type_info: TimestampType::new(unit, timezone)}
+  }
+
+  pub fn interval() -> DataType {
+    DataType::IntervalType { type_info: IntervalType::new(IntervalUnit::YEAR_MONTH) }
+  }
+
+  pub fn interval_with(unit: IntervalUnit) -> DataType {
+    DataType::IntervalType { type_info: IntervalType::new(unit) }
+  }
+
+  pub fn decimal(precision: i32, scale: i32) -> DataType {
+    DataType::DecimalType { type_info: DecimalType::new(precision, scale) }
+  }
+
+  pub fn list(ty: DataType) -> DataType {
+    DataType::ListType {type_info: ListType::new(Field::basic("item", ty))}
+  }
+
+  pub fn list_with(value_field: Field) -> DataType {
+    DataType::ListType { type_info: ListType::new(value_field) }
+  }
+
+  pub fn struc(fields: Vec<Field>) -> DataType {
+    DataType::StructType { type_info: StructType::new(fields) }
+  }
+
+  pub fn sparse_union(fields: Vec<Field>, type_codes: Vec<u8>) -> DataType {
+    DataType::UnionType { type_info: UnionType::new(UnionMode::SPARSE, fields, type_codes) }
+  }
+
+  pub fn dense_union(fields: Vec<Field>, type_codes: Vec<u8>) -> DataType {
+    DataType::UnionType { type_info: UnionType::new(UnionMode::DENSE, fields, type_codes) }
+  }
+
+  pub fn dictionary(index_type: IntegerType, dictionary: array::Array) -> DataType {
+    DataType::DictionaryType { type_info: DictionaryType::new(index_type, dictionary, false) }
+  }
+
+  pub fn dictionary_with(index_type: IntegerType, dictionary: array::Array, ordered: bool) -> DataType {
+    DataType::DictionaryType { type_info: DictionaryType::new(index_type, dictionary, ordered) }
+  }
+
+  // TODO: compile time check
+  as_type_info!(as_null_info, NullType, DataType::NullType);
+
+  as_type_info!(as_bool_info, BooleanType, DataType::BooleanType);
+
+  as_type_info!(as_int8_info, IntegerType, DataType::Int8Type);
+  as_type_info!(as_int16_info, IntegerType, DataType::Int16Type);
+  as_type_info!(as_int32_info, IntegerType, DataType::Int32Type);
+  as_type_info!(as_int64_info, IntegerType, DataType::Int64Type);
+  as_type_info!(as_uint8_info, IntegerType, DataType::UInt8Type);
+  as_type_info!(as_uint16_info, IntegerType, DataType::UInt16Type);
+  as_type_info!(as_uint32_info, IntegerType, DataType::UInt32Type);
+  as_type_info!(as_uint64_info, IntegerType, DataType::UInt64Type);
+
+  as_type_info!(as_half_float_info, FloatingPointType, DataType::HalfFloatType);
+  as_type_info!(as_float_info, FloatingPointType, DataType::FloatType);
+  as_type_info!(as_double_info, FloatingPointType, DataType::DoubleType);
+
+  as_type_info!(as_binary_info, BinaryType, DataType::BinaryType);
+  as_type_info!(as_string_info, StringType, DataType::StringType);
+
+  as_type_info!(as_date64_info, Date64Type, DataType::Date64Type);
+  as_type_info!(as_date32_info, Date32Type, DataType::Date32Type);
+  as_type_info!(as_timestamp_info, TimestampType, DataType::TimestampType);
+  as_type_info!(as_time32_info, Time32Type, DataType::Time32Type);
+  as_type_info!(as_time64_info, Time64Type, DataType::Time64Type);
+  as_type_info!(as_interval_info, IntervalType, DataType::IntervalType);
+
+  as_type_info!(as_decimal_info, DecimalType, DataType::DecimalType);
+  as_type_info!(as_list_info, ListType, DataType::ListType);
+  as_type_info!(as_struct_info, StructType, DataType::StructType);
+  as_type_info!(as_union_info, UnionType, DataType::UnionType);
+  as_type_info!(as_dictionary_info, DictionaryType, DataType::DictionaryType);
+}
+
+impl ToString for DataType {
+  fn to_string(&self) -> String {
+    match self {
+      &DataType::NullType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::BooleanType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::Int8Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::Int16Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::Int32Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::Int64Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::UInt8Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::UInt16Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::UInt32Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::UInt64Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::HalfFloatType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::FloatType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::DoubleType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::BinaryType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::StringType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::Date32Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::Date64Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::Time32Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::Time64Type { type_info: ref type_info } => type_info.to_string(),
+      &DataType::TimestampType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::IntervalType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::DecimalType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::ListType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::StructType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::UnionType { type_info: ref type_info } => type_info.to_string(),
+      &DataType::DictionaryType { type_info: ref type_info } => type_info.to_string(),
+      _ => panic!()
+    }
+  }
+}
+
+macro_rules! define_basic_type {
+    ($type_name: ident, $ty: expr, $buffer_layout: expr, $name: expr) => {
+      #[derive(Debug, Eq, PartialEq)]
+      pub struct $type_name {
+        ty: Ty,
+        buffer_layout: Vec<&'static BufferDesc>,
+        name: String
+      }
+
+      impl $type_name {
+        pub fn new() -> $type_name {
+          $type_name {
+            ty: $ty,
+            buffer_layout: $buffer_layout,
+            name: String::from($name)
+          }
+        }
+      }
+    };
+}
+
+macro_rules! define_fixed_width_type {
+    ($type_name: ident, $ty: expr, $buffer_layout: expr, $name: expr, $bit_width: expr) => {
+      #[derive(Debug, Eq, PartialEq)]
+      pub struct $type_name {
+        ty: Ty,
+        buffer_layout: Vec<&'static BufferDesc>,
+        name: String,
+        bit_width: i32
+      }
+
+      impl $type_name {
+        pub fn new() -> $type_name {
+          $type_name {
+            ty: $ty,
+            buffer_layout: $buffer_layout,
+            name: String::from($name),
+            bit_width: $bit_width
+          }
+        }
+      }
+    };
+}
+
+macro_rules! impl_arrow_type {
+    ($type_name: ident) => {
+      impl ArrowType for $type_name {
+        fn get_type(&self) -> &Ty {
+          &self.ty
+        }
+
+        fn get_buffer_layout(&self) -> &Vec<&BufferDesc> {
+          &self.buffer_layout
+        }
+
+        fn get_name(&self) -> &String {
+          &self.name
+        }
+      }
+
+      impl ToString for $type_name {
+        fn to_string(&self) -> String {
+          self.get_name().clone()
+        }
+      }
+    };
+}
+
+macro_rules! impl_fixed_width_type {
+    ($type_name: ident) => {
+      impl FixedWidthType for $type_name {
+        fn get_bit_width(&self) -> i32 {
+          self.bit_width
+        }
+      }
+    };
+}
+
+macro_rules! impl_nested_type {
+    ($type_name: ident) => {
+      impl NestedType for $type_name {
+        #[inline]
+        fn child(&self, i: usize) -> &Field {
+          &self.fields[i]
+        }
+
+        #[inline]
+        fn get_children(&self) -> &Vec<Field> {
+          &self.fields
+        }
+
+        #[inline]
+        fn num_children(&self) -> i32 {
+          self.fields.len() as i32
+        }
+      }
+
+      impl Index<usize> for $type_name {
+        type Output = Field;
+
+        #[inline]
+        fn index(&self, index: usize) -> &Field {
+          &self.fields[index]
+        }
+      }
+    };
+}
+
+define_basic_type!(NullType, Ty::Null, vec![], "null");
+impl_arrow_type!(NullType);
+define_basic_type!(BooleanType, Ty::Bool, vec![K_VALIDITY_BUFFER, K_VALUES_1], "bool");
+impl_arrow_type!(BooleanType);
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct IntegerType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  bit_width: i32,
+  is_signed: bool
+}
+
+impl IntegerType {
+  pub fn int8() -> IntegerType {
+    IntegerType::new(Ty::Int8, vec![K_VALIDITY_BUFFER, K_VALUES_8], "int8", 8, true)
+  }
+
+  pub fn int16() -> IntegerType {
+    IntegerType::new(Ty::Int16, vec![K_VALIDITY_BUFFER, K_VALUES_16], "int16", 16, true)
+  }
+
+  pub fn int32() -> IntegerType {
+    IntegerType::new(Ty::Int32, vec![K_VALIDITY_BUFFER, K_VALUES_32], "int32", 32, true)
+  }
+
+  pub fn int64() -> IntegerType {
+    IntegerType::new(Ty::Int64, vec![K_VALIDITY_BUFFER, K_VALUES_64], "int64", 64, true)
+  }
+
+  pub fn uint8() -> IntegerType {
+    IntegerType::new(Ty::UInt8, vec![K_VALIDITY_BUFFER, K_VALUES_8], "uint8", 8, false)
+  }
+
+  pub fn uint16() -> IntegerType {
+    IntegerType::new(Ty::UInt16, vec![K_VALIDITY_BUFFER, K_VALUES_16], "uint16", 16, false)
+  }
+
+  pub fn uint32() -> IntegerType {
+    IntegerType::new(Ty::UInt32, vec![K_VALIDITY_BUFFER, K_VALUES_32], "uint32", 32, false)
+  }
+
+  pub fn uint64() -> IntegerType {
+    IntegerType::new(Ty::UInt64, vec![K_VALIDITY_BUFFER, K_VALUES_64], "uint64", 64, false)
+  }
+
+  fn new(ty: Ty, buffer_layout: Vec<&'static BufferDesc>, name: &'static str, bit_width: i32, is_signed: bool) -> IntegerType {
+    IntegerType {
+      ty: ty,
+      buffer_layout: buffer_layout,
+      name: String::from(name),
+      bit_width: bit_width,
+      is_signed: is_signed
+    }
+  }
+
+  pub fn is_signed(&self) -> bool {
+    self.is_signed
+  }
+}
+
+impl_arrow_type!(IntegerType);
+impl_fixed_width_type!(IntegerType);
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Precision {
-  HALF,
-  SINGLE,
-  DOUBLE
+  Half,
+  Single,
+  Double
 }
 
-pub trait FloatTyped {
-  fn precision(&self) -> Precision;
+#[derive(Debug, Eq, PartialEq)]
+pub struct FloatingPointType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  bit_width: i32,
+  precision: Precision
+}
+
+impl FloatingPointType {
+  pub fn half_float() -> FloatingPointType {
+    FloatingPointType::new(Ty::HalfFloat, vec![K_VALIDITY_BUFFER, K_VALUES_16], "halffloat", 16, Precision::Half)
+  }
+
+  pub fn float() -> FloatingPointType {
+    FloatingPointType::new(Ty::Float, vec![K_VALIDITY_BUFFER, K_VALUES_32], "float", 32, Precision::Single)
+  }
+
+  pub fn double() -> FloatingPointType {
+    FloatingPointType::new(Ty::Double, vec![K_VALIDITY_BUFFER, K_VALUES_64], "double", 64, Precision::Double)
+  }
+
+  fn new(ty: Ty, buffer_layout: Vec<&'static BufferDesc>, name: &'static str, bit_width: i32, precision: Precision) -> FloatingPointType {
+    FloatingPointType {
+      ty: ty,
+      buffer_layout: buffer_layout,
+      name: String::from(name),
+      bit_width: bit_width,
+      precision: precision
+    }
+  }
+
+  pub fn precision(&self) -> &Precision {
+    &self.precision
+  }
+}
+
+impl_arrow_type!(FloatingPointType);
+impl_fixed_width_type!(FloatingPointType);
+
+define_basic_type!(StringType, Ty::String, vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8], "utf8");
+impl_arrow_type!(StringType);
+define_basic_type!(BinaryType, Ty::Binary, vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8], "binary");
+impl_arrow_type!(BinaryType);
+
+define_fixed_width_type!(Date32Type, Ty::Date32, vec![K_VALIDITY_BUFFER, K_VALUES_32], "date32", 32);
+impl_arrow_type!(Date32Type);
+impl_fixed_width_type!(Date32Type);
+define_fixed_width_type!(Date64Type, Ty::Date64, vec![K_VALIDITY_BUFFER, K_VALUES_64], "date64", 64);
+impl_arrow_type!(Date64Type);
+impl_fixed_width_type!(Date64Type);
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Time32Type {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  bit_width: i32,
+  unit: TimeUnit
+}
+
+impl Time32Type {
+  pub fn new(unit: TimeUnit) -> Time32Type {
+    Time32Type {
+      ty: Ty::Time32,
+      buffer_layout: vec![K_VALIDITY_BUFFER, K_VALUES_32],
+      name: String::from("time32"),
+      bit_width: 32,
+      unit: unit
+    }
+  }
+
+  pub fn unit(&self) -> &TimeUnit {
+    &self.unit
+  }
+}
+
+impl_arrow_type!(Time32Type);
+impl_fixed_width_type!(Time32Type);
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Time64Type {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  bit_width: i32,
+  unit: TimeUnit
+}
+
+impl Time64Type {
+  pub fn new(unit: TimeUnit) -> Time64Type {
+    Time64Type {
+      ty: Ty::Time64,
+      buffer_layout: vec![K_VALIDITY_BUFFER, K_VALUES_64],
+      name: String::from("time64"),
+      bit_width: 64,
+      unit: unit
+    }
+  }
+
+  pub fn unit(&self) -> &TimeUnit {
+    &self.unit
+  }
+}
+
+impl_arrow_type!(Time64Type);
+impl_fixed_width_type!(Time64Type);
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct TimestampType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  bit_width: i32,
+  unit: TimeUnit,
+  timezone: String
+}
+
+impl TimestampType {
+  pub fn new(unit: TimeUnit, timezone: &'static str) -> TimestampType {
+    TimestampType {
+      ty: Ty::Timestamp,
+      buffer_layout: vec![K_VALIDITY_BUFFER, K_VALUES_64],
+      name: String::from("timestamp"),
+      bit_width: 64,
+      unit: unit,
+      timezone: String::from(timezone)
+    }
+  }
+
+  pub fn unit(&self) -> &TimeUnit {
+    &self.unit
+  }
+
+  pub fn timezone(&self) -> &String {
+    &self.timezone
+  }
+}
+
+impl_arrow_type!(TimestampType);
+impl_fixed_width_type!(TimestampType);
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum IntervalUnit {
+  YEAR_MONTH,
+  DAY_TIME
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct IntervalType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  bit_width: i32,
+  unit: IntervalUnit
+}
+
+impl IntervalType {
+  pub fn new(unit: IntervalUnit) -> IntervalType {
+    IntervalType {
+      ty: Ty::Interval,
+      buffer_layout: vec![K_VALIDITY_BUFFER, K_VALUES_64],
+      name: String::from("interval"),
+      bit_width: 64,
+      unit: unit
+    }
+  }
+
+  pub fn unit(&self) -> &IntervalUnit {
+    &self.unit
+  }
+}
+
+impl_arrow_type!(IntervalType);
+impl_fixed_width_type!(IntervalType);
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct DecimalType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  precision: i32,
+  scale: i32
+}
+
+impl DecimalType {
+  pub fn new(precision: i32, scale: i32) -> DecimalType {
+    DecimalType {
+      ty: Ty::Decimal,
+      buffer_layout: vec![], // TODO
+      name: String::from("decimal"),
+      precision: precision,
+      scale: scale
+    }
+  }
+
+  pub fn precision(&self) -> i32 {
+    self.precision
+  }
+
+  pub fn scale(&self) -> i32 {
+    self.precision
+  }
+}
+
+impl_arrow_type!(DecimalType);
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct ListType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  value_field: Box<Field>
+}
+
+impl ListType {
+  pub fn new(value_field: Field) -> ListType {
+    ListType {
+      ty: Ty::List,
+      buffer_layout: vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER],
+      name: String::from("list"),
+      value_field: Box::new(value_field)
+    }
+  }
+
+  pub fn value_type(&self) -> &DataType {
+    self.value_field.get_type()
+  }
+
+  pub fn value_field(&self) -> &Field {
+    &self.value_field
+  }
+}
+
+impl_arrow_type!(ListType);
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct StructType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  fields: Box<Vec<Field>>
+}
+
+impl StructType {
+  pub fn new(fields: Vec<Field>) -> StructType {
+    StructType {
+      ty: Ty::Struct,
+      buffer_layout: vec![K_VALIDITY_BUFFER],
+      name: String::from("struct"),
+      fields: Box::new(fields)
+    }
+  }
+}
+
+impl_arrow_type!(StructType);
+impl_nested_type!(StructType);
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum UnionMode {
+  SPARSE,
+  DENSE
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct UnionType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  mode: UnionMode,
+  fields: Box<Vec<Field>>,
+  type_codes: Vec<u8>
+}
+
+impl UnionType {
+  pub fn new(mode: UnionMode, fields: Vec<Field>, type_codes: Vec<u8>) -> UnionType {
+    let buffer_layout = if mode == UnionMode::SPARSE {
+      vec![K_VALIDITY_BUFFER, K_TYPE_BUFFER]
+    } else {
+      vec![K_VALIDITY_BUFFER, K_TYPE_BUFFER, K_OFFSET_BUFFER]
+    };
+
+    UnionType {
+      ty: Ty::Union,
+      buffer_layout: buffer_layout,
+      name: String::from("union"),
+      mode: mode,
+      fields: Box::new(fields),
+      type_codes: type_codes
+    }
+  }
+
+  pub fn mode(&self) -> &UnionMode {
+    &self.mode
+  }
+
+  pub fn type_codes(&self) -> &Vec<u8> {
+    &self.type_codes
+  }
+}
+
+impl_arrow_type!(UnionType);
+impl_nested_type!(UnionType);
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct DictionaryType {
+  ty: Ty,
+  buffer_layout: Vec<&'static BufferDesc>,
+  name: String,
+  index_type: Box<IntegerType>,
+  dictionary: Box<array::Array>,
+  ordered: bool
+}
+
+impl DictionaryType {
+  pub fn new(index_type: IntegerType, dictionary: array::Array, ordered: bool) -> DictionaryType {
+    DictionaryType {
+      ty: Ty::Dictionary,
+      buffer_layout: vec![K_VALIDITY_BUFFER, get_data_buffer_desc(index_type.bit_width)],
+      name: String::from("dictionary"),
+      index_type: Box::new(index_type),
+      dictionary: Box::new(dictionary),
+      ordered: ordered
+    }
+  }
+
+  pub fn index_type(&self) -> &IntegerType {
+    &self.index_type
+  }
+
+  pub fn dictionary(&self) -> &array::Array {
+    &self.dictionary
+  }
+
+  pub fn ordered(&self) -> bool {
+    self.ordered
+  }
+}
+
+impl_arrow_type!(DictionaryType);
+
+impl FixedWidthType for DictionaryType {
+  fn get_bit_width(&self) -> i32 {
+    self.index_type.get_bit_width()
+  }
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Field {
   name: String,
-  ty: Box<Ty>,
+  ty: Box<DataType>,
   nullable: bool,
   // optional dictionary id if the field is dictionary encoded
   // 0 means it's not dictionary encoded
@@ -364,23 +958,23 @@ pub struct Field {
 }
 
 impl Field {
-  pub fn basic(name: &'static str, ty: Ty) -> Field {
+  pub fn basic(name: &'static str, ty: DataType) -> Field {
     Field::new(name, ty, true, 0)
   }
 
-  pub fn non_null(name: &'static str, ty: Ty) -> Field {
+  pub fn non_null(name: &'static str, ty: DataType) -> Field {
     Field::new(name, ty, false, 0)
   }
 
-  pub fn with_dic(name: &'static str, ty: Ty, dictionary: i64) -> Field {
+  pub fn with_dic(name: &'static str, ty: DataType, dictionary: i64) -> Field {
     Field::new(name, ty, true, dictionary)
   }
 
-  pub fn non_null_with_dic(name: &'static str, ty: Ty, dictionary: i64) -> Field {
+  pub fn non_null_with_dic(name: &'static str, ty: DataType, dictionary: i64) -> Field {
     Field::new(name, ty, false, dictionary)
   }
 
-  fn new(name: &'static str, ty: Ty, nullable: bool, dictionary: i64) -> Field {
+  fn new(name: &'static str, ty: DataType, nullable: bool, dictionary: i64) -> Field {
     Field {
       name: String::from(name),
       ty: Box::new(ty),
@@ -393,7 +987,7 @@ impl Field {
     &self.name
   }
 
-  pub fn get_type(&self) -> &Ty {
+  pub fn get_type(&self) -> &DataType {
     &self.ty
   }
 
@@ -408,7 +1002,7 @@ impl Field {
 
 impl ToString for Field {
   fn to_string(&self) -> String {
-    let str = self.name.clone() + ": " + self.ty.get_name();
+    let str = self.name.clone() + ": " + self.ty.to_string().as_str();
     if self.nullable {
       str + " not null"
     } else {
@@ -416,364 +1010,3 @@ impl ToString for Field {
     }
   }
 }
-
-// TODO: singleton?
-//#[derive(Debug, Eq, PartialEq)]
-//pub struct NullType {}
-//
-//impl NullType {
-//  pub fn new() -> NullType {
-//    NullType {}
-//  }
-//}
-//
-//impl Typed for NullType {
-//  fn get_type(&self) -> RawType {
-//    RawType::NULL
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-//    vec![]
-//  }
-//
-//  fn get_name(&self) -> &'static str {
-//    "null"
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq)]
-//pub struct BooleanType {}
-//
-//impl BooleanType {
-//  pub fn new() -> BooleanType {
-//    BooleanType {}
-//  }
-//}
-//
-//impl Typed for BooleanType {
-//  fn get_type(&self) -> RawType {
-//    RawType::BOOL
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-//    vec![K_VALIDITY_BUFFER, K_VALUES_1]
-//  }
-//
-//  fn get_name(&self) -> &'static str {
-//    "bool"
-//  }
-//}
-//
-//impl FixedWidth for BooleanType {
-//  fn get_bit_width(&self) -> i32 {
-//    1
-//  }
-//}
-//
-////impl AcceptVisitor for NullType {
-////  fn accept(&self, visit_type: &VisitType) {
-////    // TODO
-////  }
-////}
-//
-//macro_rules! define_primitive_type {
-//  ($type_name: ident, $str_name: expr, $raw_type: expr, $rust_type: ty, $buffer_desc: expr) => {
-//    #[derive(Debug, Eq, PartialEq)]
-//    pub struct $type_name {}
-//
-//    impl $type_name {
-//      pub fn new() -> $type_name {
-//        $type_name {}
-//      }
-//    }
-//
-//    impl Typed for $type_name {
-//      fn get_type(&self) -> RawType {
-//        $raw_type
-//      }
-//
-//      fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-//        vec![K_VALIDITY_BUFFER, $buffer_desc] // TODO?
-//      }
-//
-//      fn get_name(&self) -> &'static str {
-//        $str_name
-//      }
-//    }
-//
-//    impl FixedWidth for $type_name {
-//      fn get_bit_width(&self) -> i32 {
-//        mem::size_of::<$rust_type>() as i32
-//      }
-//    }
-//  }
-//}
-//
-//macro_rules! impl_int_type {
-//  ($type_name: ident, $is_signed: expr) => (
-//    impl IntegerTyped for $type_name {
-//      fn is_signed(&self) -> bool {
-//        $is_signed
-//      }
-//    }
-//  );
-//}
-//
-//macro_rules! impl_float_type {
-//  ($type_name: ident, $precision: expr) => (
-//    impl FloatTyped for $type_name {
-//      fn precision(&self) -> Precision {
-//        $precision
-//      }
-//    }
-//  );
-//}
-//
-////macro_rules! impl_nested_type {
-////  ($type_name: ident) => (
-////    impl<T: Typed> NestedTyped<T> for $type_name<T> {
-////      #[inline]
-////      fn child(&self, i: usize) -> &Field<T> {
-////        &self.children[i]
-////      }
-////
-////      #[inline]
-////      fn get_children(&self) -> &Vec<Field<T>> {
-////        &self.children
-////      }
-////
-////      #[inline]
-////      fn num_children(&self) -> i32 {
-////        self.children.len() as i32
-////      }
-////    }
-////
-////    impl<T: Typed> Index<usize> for $type_name<T> {
-////      type Output = Field<T>;
-////
-////      #[inline]
-////      fn index(&self, index: usize) -> &Field<T> {
-////        &self.children[index]
-////      }
-////    }
-////  );
-////}
-//
-//define_primitive_type!(UInt8Type, "uint8", RawType::UINT8, u8, K_VALUES_8);
-//define_primitive_type!(UInt16Type, "uint16", RawType::UINT16, u16, K_VALUES_16);
-//define_primitive_type!(UInt32Type, "uint32", RawType::UINT32, u32, K_VALUES_32);
-//define_primitive_type!(UInt64Type, "uint64", RawType::UINT64, u64, K_VALUES_64);
-//define_primitive_type!(Int8Type, "int8", RawType::INT8, i8, K_VALUES_8);
-//define_primitive_type!(Int16Type, "int16", RawType::INT16, i16, K_VALUES_16);
-//define_primitive_type!(Int32Type, "int32", RawType::INT32, i32, K_VALUES_32);
-//define_primitive_type!(Int64Type, "int64", RawType::INT64, i64, K_VALUES_64);
-//impl_int_type!(UInt8Type, false);
-//impl_int_type!(UInt16Type, false);
-//impl_int_type!(UInt32Type, false);
-//impl_int_type!(UInt64Type, false);
-//impl_int_type!(Int8Type, true);
-//impl_int_type!(Int16Type, true);
-//impl_int_type!(Int32Type, true);
-//impl_int_type!(Int64Type, true);
-//
-//define_primitive_type!(HalfFloatType, "halffloat", RawType::HALF_FLOAT, u16, K_VALUES_16);
-//define_primitive_type!(FloatType, "float", RawType::FLOAT, f32, K_VALUES_32);
-//define_primitive_type!(DoubleType, "double", RawType::DOUBLE, f64, K_VALUES_64);
-//impl_float_type!(HalfFloatType, Precision::HALF);
-//impl_float_type!(FloatType, Precision::SINGLE);
-//impl_float_type!(DoubleType, Precision::DOUBLE);
-//
-////impl AcceptVisitor for UInt8Type {
-////  fn accept(&self, visit_type: &VisitType) {
-////    unimplemented!()
-////  }
-////}
-//
-////#[derive(Debug, Eq, PartialEq)]
-////pub struct ListType<T: Typed> {
-////  children: Vec<Field<T>>
-////}
-////
-////impl<T: Typed> ListType<T> {
-////  pub fn with_value_type(value_type: T) -> ListType<T> {
-////    ListType::with_field(Field::basic("item", value_type))
-////  }
-////
-////  pub fn with_field(field: Field<T>) -> ListType<T> {
-////    ListType {
-////      children: vec![field]
-////    }
-////  }
-////
-////  pub fn value_field(&self) -> &Field<T> {
-////    &self.children[0]
-////  }
-////
-////  pub fn value_type(&self) -> &T {
-////    self.children[0].get_type()
-////  }
-////}
-////
-////impl<T: Typed> Typed for ListType<T> {
-////  fn get_type(&self) -> RawType {
-////    RawType::LIST
-////  }
-////
-////  fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-////    vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER]
-////  }
-////
-////  fn get_name(&self) -> &'static str {
-////    "list"
-////  }
-////}
-////
-////impl_nested_type!(ListType);
-////
-////#[derive(Debug, Eq, PartialEq)]
-////pub struct BinaryType {}
-////
-////impl BinaryType {
-////  pub fn new() -> BinaryType {
-////    BinaryType {}
-////  }
-////}
-////
-////impl Typed for BinaryType {
-////  fn get_type(&self) -> RawType {
-////    RawType::BINARY
-////  }
-////
-////  fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-////    vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8]
-////  }
-////
-////  fn get_name(&self) -> &'static str {
-////    "binary"
-////  }
-////}
-////
-////#[derive(Debug, Eq, PartialEq)]
-////pub struct StringType {}
-////
-////impl StringType {
-////  pub fn new() -> StringType {
-////    StringType {}
-////  }
-////}
-////
-////impl Typed for StringType {
-////  fn get_type(&self) -> RawType {
-////    RawType::STRING
-////  }
-////
-////  fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-////    vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8]
-////  }
-////
-////  fn get_name(&self) -> &'static str {
-////    "utf8"
-////  }
-////}
-////
-////#[derive(Debug, Eq, PartialEq)]
-////pub struct StructType<T: Typed> {
-////  children: Vec<Field<T>>
-////}
-////
-////impl<T: Typed> StructType<T> {
-////  pub fn new(fields: Vec<Field<T>>) -> StructType<T> {
-////    StructType {
-////      children: fields
-////    }
-////  }
-////}
-////
-////impl<T:Typed> Typed for StructType<T> {
-////  fn get_type(&self) -> RawType {
-////    RawType::STRUCT
-////  }
-////
-////  fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-////    vec![K_VALIDITY_BUFFER]
-////  }
-////
-////  fn get_name(&self) -> &'static str {
-////    "struct"
-////  }
-////}
-////
-////impl_nested_type!(StructType);
-////
-////#[derive(Debug, Eq, PartialEq)]
-////pub struct DecimalType {
-////  precision: i32,
-////  scale: i32
-////}
-////
-////impl DecimalType {
-////  pub fn new(precision: i32, scale: i32) -> DecimalType {
-////    DecimalType {
-////      precision: precision,
-////      scale: scale
-////    }
-////  }
-////}
-////
-////impl Typed for DecimalType {
-////  fn get_type(&self) -> RawType {
-////    RawType::DECIMAL
-////  }
-////
-////  fn get_buffer_layout(&self) -> Vec<&BufferDesc> {
-////    // TODO
-////    vec![]
-////  }
-////
-////  fn get_name(&self) -> &'static str {
-////    unimplemented!()
-////  }
-////}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum UnionMode {
-  SPARSE,
-  DENSE
-}
-
-////#[derive(Debug, Eq, PartialEq)]
-////pub struct UnionType<T: Typed> {
-////  children: Vec<Field<T>>,
-////  type_codes: Vec<u8>,
-////  mode: UnionMode,
-////}
-////
-////impl<T:Typed> UnionType<T> {
-////  pub fn new_sparse_type(fields: Vec<Field<T>>, type_codes: Vec<u8>) -> UnionType<T> {
-////    UnionType {
-////      children: fields,
-////      type_codes: type_codes,
-////      mode: UnionMode::SPARSE
-////    }
-////  }
-////
-////  pub fn new_dense_type(fields: Vec<Field<T>>, type_codes: Vec<u8>) -> UnionType<T> {
-////    UnionType {
-////      children: fields,
-////      type_codes: type_codes,
-////      mode: UnionMode::DENSE
-////    }
-////  }
-////}
-////
-////impl_nested_type!(UnionType);
-//
-//// DateType
-//
-//// TimeType
-//
-//// TimestampType
-//
-//// IntervalType
-//
-//// DictionaryType

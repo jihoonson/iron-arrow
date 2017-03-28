@@ -39,138 +39,191 @@ mod tests {
 
   #[test]
   fn test_field() {
-    let field = Field::basic("f1", Ty::Null);
+    let field = Field::basic("f1", DataType::null());
     assert_eq!("f1", field.get_name().as_str());
-    assert_eq!(&Ty::Null, field.get_type());
-    assert_eq!(&Ty::Null, field.get_type());
+    assert_eq!(&Ty::Null, field.get_type().as_null_info().get_type());
     assert_eq!(true, field.is_nullable());
     assert_eq!(0, field.get_dictionary());
 
-    let field = Field::non_null("f2", Ty::Float);
+    let field = Field::non_null("f2", DataType::float());
     assert_eq!("f2", field.get_name().as_str());
-    assert_eq!(&Ty::Float, field.get_type());
+    assert_eq!(&Ty::Float, field.get_type().as_float_info().get_type());
     assert_eq!(false, field.is_nullable());
     assert_eq!(0, field.get_dictionary());
 
-    let field = Field::with_dic("f3", Ty::Int64, -1);
+    let field = Field::with_dic("f3", DataType::int64(), -1);
     assert_eq!("f3", field.get_name().as_str());
-    assert_eq!(&Ty::Int64, field.get_type());
+    assert_eq!(&Ty::Int64, field.get_type().as_int64_info().get_type());
     assert_eq!(true, field.is_nullable());
     assert_eq!(-1, field.get_dictionary());
   }
 
   #[test]
-  fn test_null_type() {
-    let ty = Ty::Null;
-    assert_eq!("null", ty.get_name());
+  fn test_null() {
+    let ty = DataType::null();
+    let info = ty.as_null_info();
+    assert_eq!("null", info.get_name());
     let expected_layout: Vec<&BufferDesc> = Vec::new();
-    assert_eq!(expected_layout, ty.get_buffer_layout());
+    assert_eq!(&expected_layout, info.get_buffer_layout());
   }
 
   #[test]
-  #[should_panic]
-  fn test_bit_width_of_null_type() {
-    Ty::Null.bit_width();
+  fn test_boolean() {
+    let ty = DataType::boolean();
+    let info = ty.as_bool_info();
+    assert_eq!("bool", info.get_name());
+    assert_eq!(&vec![K_VALIDITY_BUFFER, K_VALUES_1], info.get_buffer_layout());
+  }
+
+  macro_rules! test_primitive {
+    ($test_name: ident, $type_name: ident, $type_info: ident, $str_name: expr, $ty: expr, $width: expr, $buffer_layout: expr) => (
+      #[test]
+      fn $test_name() {
+        let ty = DataType::$type_name();
+        let info = ty.$type_info();
+        assert_eq!(&$ty, info.get_type());
+        assert_eq!(&String::from($str_name), info.get_name());
+        assert_eq!($width, info.get_bit_width());
+        assert_eq!(&$buffer_layout, info.get_buffer_layout());
+      }
+    );
+  }
+
+  macro_rules! test_float {
+    ($test_name: ident, $type_name: ident, $type_info: ident, $precision: expr) => (
+      #[test]
+      fn $test_name() {
+        let ty = $DataType::$type_name();
+        let info = ty.$type_info();
+        assert_eq!($precision, info.precision());
+      }
+    );
+  }
+
+  test_primitive!(test_uint8, uint8, as_uint8_info, "uint8", Ty::UInt8, 8, vec![K_VALIDITY_BUFFER, K_VALUES_8]);
+  test_primitive!(test_uint16, uint16, as_uint16_info, "uint16", Ty::UInt16, 16, vec![K_VALIDITY_BUFFER, K_VALUES_16]);
+  test_primitive!(test_uint32, uint32, as_uint32_info, "uint32", Ty::UInt32, 32, vec![K_VALIDITY_BUFFER, K_VALUES_32]);
+  test_primitive!(test_uint64, uint64, as_uint64_info, "uint64", Ty::UInt64, 64, vec![K_VALIDITY_BUFFER, K_VALUES_64]);
+  test_primitive!(test_int8, int8, as_int8_info, "int8", Ty::Int8, 8, vec![K_VALIDITY_BUFFER, K_VALUES_8]);
+  test_primitive!(test_int16, int16, as_int16_info, "int16", Ty::Int16, 16, vec![K_VALIDITY_BUFFER, K_VALUES_16]);
+  test_primitive!(test_int32, int32, as_int32_info, "int32", Ty::Int32, 32, vec![K_VALIDITY_BUFFER, K_VALUES_32]);
+  test_primitive!(test_int64, int64, as_int64_info, "int64", Ty::Int64, 64, vec![K_VALIDITY_BUFFER, K_VALUES_64]);
+
+  test_primitive!(test_half_float, half_float, as_half_float_info, "halffloat", Ty::HalfFloat, 16, vec![K_VALIDITY_BUFFER, K_VALUES_16]);
+  test_primitive!(test_float, float, as_float_info, "float", Ty::Float, 32, vec![K_VALIDITY_BUFFER, K_VALUES_32]);
+  test_primitive!(test_double, double, as_double_info, "double", Ty::Double, 64, vec![K_VALIDITY_BUFFER, K_VALUES_64]);
+
+  test_primitive!(test_date64, date64, as_date64_info, "date64", Ty::Date64, 64, vec![K_VALIDITY_BUFFER, K_VALUES_64]);
+  test_primitive!(test_date32, date32, as_date32_info, "date32", Ty::Date32, 32, vec![K_VALIDITY_BUFFER, K_VALUES_32]);
+  test_primitive!(test_timestamp, timestamp, as_timestamp_info, "timestamp", Ty::Timestamp, 64, vec![K_VALIDITY_BUFFER, K_VALUES_64]);
+  test_primitive!(test_time32, time32, as_time32_info, "time32", Ty::Time32, 32, vec![K_VALIDITY_BUFFER, K_VALUES_32]);
+  test_primitive!(test_time64, time64, as_time64_info, "time64", Ty::Time64, 64, vec![K_VALIDITY_BUFFER, K_VALUES_64]);
+  test_primitive!(test_interval, interval, as_interval_info, "interval", Ty::Interval, 64, vec![K_VALIDITY_BUFFER, K_VALUES_64]);
+
+  #[test]
+  fn test_integers() {
+    assert!(DataType::int8().as_int8_info().is_signed());
+    assert!(DataType::int16().as_int16_info().is_signed());
+    assert!(DataType::int32().as_int32_info().is_signed());
+    assert!(DataType::int64().as_int64_info().is_signed());
+
+    assert!(!DataType::uint8().as_uint8_info().is_signed());
+    assert!(!DataType::uint16().as_uint16_info().is_signed());
+    assert!(!DataType::uint32().as_uint32_info().is_signed());
+    assert!(!DataType::uint64().as_uint64_info().is_signed());
   }
 
   #[test]
-  fn test_boolean_type() {
-    let ty = Ty::Bool;
-    assert_eq!("bool", ty.get_name());
-    assert_eq!(vec![K_VALIDITY_BUFFER, K_VALUES_1], ty.get_buffer_layout());
+  fn test_floats() {
+    assert_eq!(&Precision::Half, DataType::half_float().as_half_float_info().precision());
+    assert_eq!(&Precision::Single, DataType::float().as_float_info().precision());
+    assert_eq!(&Precision::Double, DataType::double().as_double_info().precision());
   }
 
-  //  #[test]
-  //  fn test_bool() {
-  //    assert_eq!(1, RawType::BOOL.bit_width());
-  //  }
-  //
-  //  macro_rules! test_primitive_int_type {
-  //    ($test_name: ident, $type_name: ident, $str_name: expr, $raw_type: expr, $rust_type: ty, $buffer_desc: ident, $is_signed: expr) => (
-  //      #[test]
-  //      fn $test_name() {
-  //        use std::mem;
-  //
-  //        let ty = $type_name::new();
-  //        assert_eq!($raw_type, ty.get_type());
-  //        assert_eq!($str_name, ty.get_name());
-  //        assert_eq!(mem::size_of::<$rust_type>() as i32, ty.get_bit_width());
-  //        assert_eq!($is_signed, ty.is_signed());
-  //        assert_eq!(vec![K_VALIDITY_BUFFER, $buffer_desc], ty.get_buffer_layout());
-  //      }
-  //    );
-  //  }
-  //
-  //  macro_rules! test_primitive_float_type {
-  //    ($test_name: ident, $type_name: ident, $str_name: expr, $raw_type: expr, $rust_type: ty, $buffer_desc: ident, $precision: expr) => (
-  //      #[test]
-  //      fn $test_name() {
-  //        use std::mem;
-  //
-  //        let ty = $type_name::new();
-  //        assert_eq!($raw_type, ty.get_type());
-  //        assert_eq!($str_name, ty.get_name());
-  //        assert_eq!(mem::size_of::<$rust_type>() as i32, ty.get_bit_width());
-  //        assert_eq!($precision, ty.precision());
-  //        assert_eq!(vec![K_VALIDITY_BUFFER, $buffer_desc], ty.get_buffer_layout());
-  //      }
-  //    );
-  //  }
-  //
-  //  test_primitive_int_type!(test_uint8_type, UInt8Type, "uint8", RawType::UINT8, u8, K_VALUES_8, false);
-  //  test_primitive_int_type!(test_uint16_type, UInt16Type, "uint16", RawType::UINT16, u16, K_VALUES_16, false);
-  //  test_primitive_int_type!(test_uint32_type, UInt32Type, "uint32", RawType::UINT32, u32, K_VALUES_32, false);
-  //  test_primitive_int_type!(test_uint64_type, UInt64Type, "uint64", RawType::UINT64, u64, K_VALUES_64, false);
-  //  test_primitive_int_type!(test_int8_type, Int8Type, "int8", RawType::INT8, i8, K_VALUES_8, true);
-  //  test_primitive_int_type!(test_int16_type, Int16Type, "int16", RawType::INT16, i16, K_VALUES_16, true);
-  //  test_primitive_int_type!(test_int32_type, Int32Type, "int32", RawType::INT32, i32, K_VALUES_32, true);
-  //  test_primitive_int_type!(test_int64_type, Int64Type, "int64", RawType::INT64, i64, K_VALUES_64, true);
-  //  test_primitive_float_type!(test_half_float_type, HalfFloatType, "halffloat", RawType::HALF_FLOAT, u16, K_VALUES_16, Precision::HALF);
-  //  test_primitive_float_type!(test_float_type, FloatType, "float", RawType::FLOAT, f32, K_VALUES_32, Precision::SINGLE);
-  //  test_primitive_float_type!(test_double_type, DoubleType, "double", RawType::DOUBLE, f64, K_VALUES_64, Precision::DOUBLE);
+  #[test]
+  fn test_binary() {
+    let ty = DataType::binary();
+    let info = ty.as_binary_info();
+    assert_eq!(&Ty::Binary, info.get_type());
+    assert_eq!("binary", info.get_name());
+    assert_eq!(&vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8], info.get_buffer_layout());
+  }
 
-  //  #[test]
-  //  fn test_list_type() {
-  //    let ty = ListType::with_value_type(DoubleType::new());
-  //    assert_eq!(RawType::LIST, ty.get_type());
-  //    assert_eq!("list", ty.get_name());
-  //    assert_eq!(vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER], ty.get_buffer_layout());
-  //    assert_eq!(&DoubleType::new(), ty.value_type());
-  //    assert_eq!(1, ty.num_children());
-  //    assert_eq!(Field::basic("item", DoubleType::new()), ty[0]);
-  //    assert_eq!(&Field::basic("item", DoubleType::new()), ty.value_field());
-  //    assert_eq!(&vec![Field::basic("item", DoubleType::new())], ty.get_children())
-  //  }
-  //
-  //  #[test]
-  //  fn test_binary_type() {
-  //    let ty = BinaryType::new();
-  //    assert_eq!(RawType::BINARY, ty.get_type());
-  //    assert_eq!("binary", ty.get_name());
-  //    assert_eq!(vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8], ty.get_buffer_layout());
-  //  }
-  //
-  //  #[test]
-  //  fn test_string_type() {
-  //    let ty = StringType::new();
-  //    assert_eq!(RawType::STRING, ty.get_type());
-  //    assert_eq!("utf8", ty.get_name());
-  //    assert_eq!(vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8], ty.get_buffer_layout());
-  //  }
+  #[test]
+  fn test_string_type() {
+    let ty = DataType::string();
+    let info = ty.as_string_info();
+    assert_eq!(&Ty::String, info.get_type());
+    assert_eq!("utf8", info.get_name());
+    assert_eq!(&vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER, K_VALUES_8], info.get_buffer_layout());
+  }
 
-  //  #[test]
-  //  fn test_struct_type() {
-  //    let ty = StructType::new(vec![Field::basic("f1", NullType::new()), Field::basic("f2", Int32Type::new())]);
-  //    assert_eq!(RawType::STRUCT, ty.get_type());
-  //    assert_eq!("struct", ty.get_name());
-  //    assert_eq!(vec![K_VALIDITY_BUFFER], ty.get_buffer_layout());
-  //    assert_eq!(2, ty.num_children());
-  //    assert_eq!(Field::basic("f1", NullType::new()), ty[0]);
-  //    assert_eq!(Field::basic("f2", Int32Type::new()), ty[1]);
-  //  }
+  #[test]
+  fn test_decimal() {
+    let ty = DataType::decimal(5, 2);
+    let info = ty.as_decimal_info();
+    assert_eq!(&Ty::Decimal, info.get_type());
+    assert_eq!(&String::from("decimal"), info.get_name());
+    let expected_layout: Vec<&BufferDesc> = Vec::new();
+    assert_eq!(&expected_layout, info.get_buffer_layout());
+  }
 
-  //  #[test]
-  //  fn test_struct_type() {
-  //    let ty = RawType::STRUCT { children: vec![Field::basic("f1", RawType::DATE), Field::basic("f2", RawType::DOUBLE)] };
-  //  }
+  #[test]
+  fn test_list() {
+    let ty = DataType::list_with(Field::basic("f1", DataType::timestamp()));
+    let info = ty.as_list_info();
+    assert_eq!(&Ty::List, info.get_type());
+    assert_eq!(&String::from("list"), info.get_name());
+    assert_eq!(&vec![K_VALIDITY_BUFFER, K_OFFSET_BUFFER], info.get_buffer_layout());
+    assert_eq!(&DataType::timestamp(), info.value_type());
+    assert_eq!(&Field::basic("f1", DataType::timestamp()), info.value_field());
+  }
+
+  #[test]
+  fn test_struct() {
+    let ty = DataType::struc(vec![Field::basic("f1", DataType::date32()), Field::basic("f2", DataType::int32())]);
+    let info = ty.as_struct_info();
+    assert_eq!(&Ty::Struct, info.get_type());
+    assert_eq!(&String::from("struct"), info.get_name());
+    assert_eq!(&vec![K_VALIDITY_BUFFER], info.get_buffer_layout());
+    assert_eq!(2, info.num_children());
+    assert_eq!(&Field::basic("f1", DataType::date32()), info.child(0));
+    assert_eq!(&Field::basic("f2", DataType::int32()), info.child(1));
+    assert_eq!(&vec![Field::basic("f1", DataType::date32()), Field::basic("f2", DataType::int32())],
+     info.get_children());
+    assert_eq!(Field::basic("f1", DataType::date32()), info[0]);
+    assert_eq!(Field::basic("f2", DataType::int32()), info[1]);
+  }
+
+  #[test]
+  fn test_union() {
+    let ty = DataType::sparse_union(
+      vec![Field::basic("f1", DataType::date32()), Field::basic("f2", DataType::int32())],
+      vec![0, 1, 2]
+    );
+    let info = ty.as_union_info();
+    assert_eq!(&Ty::Union, info.get_type());
+    assert_eq!(&String::from("union"), info.get_name());
+    assert_eq!(&vec![0, 1, 2], info.type_codes());
+    assert_eq!(2, info.num_children());
+    assert_eq!(&Field::basic("f1", DataType::date32()), info.child(0));
+    assert_eq!(&Field::basic("f2", DataType::int32()), info.child(1));
+    assert_eq!(&vec![Field::basic("f1", DataType::date32()), Field::basic("f2", DataType::int32())],
+    info.get_children());
+    assert_eq!(Field::basic("f1", DataType::date32()), info[0]);
+    assert_eq!(Field::basic("f2", DataType::int32()), info[1]);
+
+    assert_eq!(&UnionMode::SPARSE, info.mode());
+    assert_eq!(&vec![K_VALIDITY_BUFFER, K_TYPE_BUFFER], info.get_buffer_layout());
+
+    let ty = DataType::dense_union(
+      vec![Field::basic("f1", DataType::date32()), Field::basic("f2", DataType::int32())],
+      vec![0, 1, 2]
+    );
+    let info = ty.as_union_info();
+    assert_eq!(&UnionMode::DENSE, info.mode());
+    assert_eq!(&vec![K_VALIDITY_BUFFER, K_TYPE_BUFFER, K_OFFSET_BUFFER], info.get_buffer_layout());
+  }
+
+  // TODO: dictionary type test
 }
