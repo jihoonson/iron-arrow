@@ -19,12 +19,6 @@ language: rust
 rust:
   - nightly
 
-before_install:
-  - export ARROW_HOME=$TRAVIS_BUILD_DIR/arrow-install
-  - export CC="gcc-4.9"
-  - export CXX="g++-4.9"
-  - $TRAVIS_BUILD_DIR/ci/prepare_arrow.sh
-
 script:
   - cargo build --verbose
   - cargo test

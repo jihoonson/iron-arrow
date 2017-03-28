@@ -4,8 +4,8 @@
   <tr>
     <td>Build Status</td>
     <td>
-    <a href="https://travis-ci.org/jihoonson/arrow-rs">
-    <img src="https://travis-ci.org/jihoonson/arrow-rs.svg?branch=master" alt="travis build status" />
+    <a href="https://travis-ci.org/jihoonson/iron-arrow">
+    <img src="https://travis-ci.org/jihoonson/iron-arrow.svg?branch=master" alt="travis build status" />
     </a>
     </td>
   </tr>
