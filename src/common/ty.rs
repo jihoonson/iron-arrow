@@ -384,6 +384,62 @@ impl DataType {
   as_type_info!(as_struct_info, StructType, DataType::StructType);
   as_type_info!(as_union_info, UnionType, DataType::UnionType);
   as_type_info!(as_dictionary_info, DictionaryType, DataType::DictionaryType);
+
+  pub fn is_integer(ty: &Ty) -> bool {
+    match ty {
+      &Ty::Int8 => true,
+      &Ty::Int16 => true,
+      &Ty::Int32 => true,
+      &Ty::Int64 => true,
+      &Ty::UInt8 => true,
+      &Ty::UInt16 => true,
+      &Ty::UInt32 => true,
+      &Ty::UInt64 => true,
+      _ => false
+    }
+  }
+
+  pub fn is_float(ty: &Ty) -> bool {
+    match ty {
+      &Ty::HalfFloat => true,
+      &Ty::Float => true,
+      &Ty::Double => true,
+      _ => false
+    }
+  }
+
+  pub fn is_primitive(ty: &Ty) -> bool {
+    match ty {
+      &Ty::Null => true,
+      &Ty::Bool => true,
+      &Ty::Int8 => true,
+      &Ty::Int16 => true,
+      &Ty::Int32 => true,
+      &Ty::Int64 => true,
+      &Ty::UInt8 => true,
+      &Ty::UInt16 => true,
+      &Ty::UInt32 => true,
+      &Ty::UInt64 => true,
+      &Ty::HalfFloat => true,
+      &Ty::Float => true,
+      &Ty::Double => true,
+      &Ty::Date32 => true,
+      &Ty::Date64 => true,
+      &Ty::Time32 => true,
+      &Ty::Time64 => true,
+      &Ty::Timestamp => true,
+      &Ty::Interval => true,
+      _ => false
+    }
+  }
+
+  pub fn is_binary_like(ty: &Ty) -> bool {
+    match ty {
+      &Ty::Binary => true,
+      &Ty::String => true,
+      _ => false
+    }
+  }
 }
 
 impl ToString for DataType {

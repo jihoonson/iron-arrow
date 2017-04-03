@@ -18,39 +18,39 @@ pub struct ArrowError {
 }
 
 impl ArrowError {
-  pub fn out_of_memory(message: &'static str) -> ArrowError {
+  pub fn out_of_memory(message: String) -> ArrowError {
     ArrowError::new(StatusCode::OutOfMemory, message, -1)
   }
 
-  pub fn key_error(message: &'static str) -> ArrowError {
+  pub fn key_error(message: String) -> ArrowError {
     ArrowError::new(StatusCode::KeyError, message, -1)
   }
 
-  pub fn type_error(message: &'static str) -> ArrowError {
+  pub fn type_error(message: String) -> ArrowError {
     ArrowError::new(StatusCode::TypeError, message, -1)
   }
 
-  pub fn invalid(message: &'static str) -> ArrowError {
+  pub fn invalid(message: String) -> ArrowError {
     ArrowError::new(StatusCode::Invalid, message, -1)
   }
 
-  pub fn io_error(message: &'static str) -> ArrowError {
+  pub fn io_error(message: String) -> ArrowError {
     ArrowError::new(StatusCode::IOError, message, -1)
   }
 
-  pub fn unknown_error(message: &'static str) -> ArrowError {
+  pub fn unknown_error(message: String) -> ArrowError {
     ArrowError::new(StatusCode::UnknownError, message, -1)
   }
 
-  pub fn not_implemented(message: &'static str) -> ArrowError {
+  pub fn not_implemented(message: String) -> ArrowError {
     ArrowError::new(StatusCode::NotImplemented, message, -1)
   }
 
-  fn new(code: StatusCode, message: &'static str, posix_code: i16) -> ArrowError {
+  fn new(code: StatusCode, message: String, posix_code: i16) -> ArrowError {
     ArrowError {
       code: code,
       posix_code: posix_code,
-      message: String::from(message)
+      message: message
     }
   }
 
