@@ -62,7 +62,9 @@ impl MemoryPool for DefaultMemoryPool {
           let p_new_page = mem::transmute::<*const u8, *mut libc::c_void>(new_page);
           let p_old_page = mem::transmute::<*const u8, *mut libc::c_void>(page);
           libc::memcpy(p_new_page, p_old_page, old_size as usize);
-          libc::free(p_old_page);
+          if old_size > 0 {
+            libc::free(p_old_page);
+          }
           self.bytes_allocated.fetch_add(new_size - old_size, Ordering::Relaxed);
 
           let locked = self.lock.lock().unwrap();

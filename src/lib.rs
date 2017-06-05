@@ -1,19 +1,21 @@
 #![feature(integer_atomics)]
+#![feature(box_syntax, box_patterns)]
 extern crate libc;
+extern crate num;
 
 pub mod common;
 pub mod array;
 pub mod memory_pool;
+pub mod buffer;
 
 #[cfg(test)]
 mod tests {
   use memory_pool;
   use common::status::ArrowError;
+  use memory_pool::{DefaultMemoryPool, MemoryPool};
 
   #[test]
   fn test_allocate() {
-    use memory_pool::{DefaultMemoryPool, MemoryPool};
-
     let mut pool = DefaultMemoryPool::new();
     match pool.allocate(100) {
       Ok(page) => {
@@ -30,8 +32,6 @@ mod tests {
 
   #[test]
   fn test_reallocate() {
-    use memory_pool::{DefaultMemoryPool, MemoryPool};
-
     let mut pool = DefaultMemoryPool::new();
     let page = match pool.allocate(100) {
       Ok(page) => page,
@@ -57,5 +57,20 @@ mod tests {
     pool.free(page, 50);
     assert_eq!(0, pool.bytes_allocated());
     assert_eq!(200, pool.max_memory());
+  }
+
+  #[test]
+  fn test_drop_empty_pool_buffer() {
+    use buffer::PoolBuffer;
+    let mut buffer = PoolBuffer::new(Box::new(DefaultMemoryPool::new()));
+  }
+
+  #[test]
+  fn test_pool_buffer() {
+    use buffer::{Buffer, MutableBuffer, ResizableBuffer, PoolBuffer, BufferBuilder};
+
+    let mut pool = DefaultMemoryPool::new();
+    let mut buffer = PoolBuffer::new(Box::new(pool));
+    let mut buffer = buffer.reserve(10).unwrap();
   }
 }

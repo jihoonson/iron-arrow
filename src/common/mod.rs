@@ -1,5 +1,6 @@
 pub mod status;
 pub mod ty;
+pub mod bit_util;
 
 #[cfg(test)]
 mod tests {

@@ -11,6 +11,7 @@ pub enum StatusCode {
   NotImplemented = 10,
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct ArrowError {
   code: StatusCode,
   posix_code: i16,
