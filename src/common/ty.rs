@@ -343,11 +343,11 @@ impl DataType {
     DataType::UnionType { type_info: UnionType::new(UnionMode::DENSE, fields, type_codes) }
   }
 
-  pub fn dictionary(index_type: IntegerType, dictionary: array::Array) -> DataType {
+  pub fn dictionary(index_type: IntegerType, dictionary: array::ArrayType) -> DataType {
     DataType::DictionaryType { type_info: DictionaryType::new(index_type, dictionary, false) }
   }
 
-  pub fn dictionary_with(index_type: IntegerType, dictionary: array::Array, ordered: bool) -> DataType {
+  pub fn ordered_dictionary(index_type: IntegerType, dictionary: array::ArrayType, ordered: bool) -> DataType {
     DataType::DictionaryType { type_info: DictionaryType::new(index_type, dictionary, ordered) }
   }
 
@@ -966,12 +966,12 @@ pub struct DictionaryType {
   buffer_layout: Vec<&'static BufferDesc>,
   name: String,
   index_type: Box<IntegerType>,
-  dictionary: Box<array::Array>,
+  dictionary: Box<array::ArrayType>,
   ordered: bool
 }
 
 impl DictionaryType {
-  pub fn new(index_type: IntegerType, dictionary: array::Array, ordered: bool) -> DictionaryType {
+  pub fn new(index_type: IntegerType, dictionary: array::ArrayType, ordered: bool) -> DictionaryType {
     DictionaryType {
       ty: Ty::Dictionary,
       buffer_layout: vec![K_VALIDITY_BUFFER, get_data_buffer_desc(index_type.bit_width)],
@@ -986,7 +986,7 @@ impl DictionaryType {
     &self.index_type
   }
 
-  pub fn dictionary(&self) -> &array::Array {
+  pub fn dictionary(&self) -> &array::ArrayType {
     &self.dictionary
   }
 

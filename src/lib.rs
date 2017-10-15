@@ -94,4 +94,16 @@ mod tests {
     assert_eq!(400, buffer.size());
     assert_eq!(512, buffer.capacity());
   }
+
+  #[test]
+  fn test_array_data() {
+    use common::ty::DataType;
+    use array::ArrayData;
+
+    let ty = DataType::int32();
+    let data = ArrayData::new(&ty, 100, 0, 0);
+
+    assert_eq!(&ty, data.ty());
+    assert_eq!(100, data.len());
+  }
 }
