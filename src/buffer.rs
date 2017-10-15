@@ -24,8 +24,6 @@ pub trait MutableBuffer {
 pub trait ResizableBuffer<T> {
   fn resize(&mut self, new_size: i64) -> Result<&mut T, ArrowError>;
 
-  fn grow(&mut self, new_size: i64) -> Result<&mut T, ArrowError>;
-
   fn reserve(&mut self, new_capacity: i64) -> Result<&mut T, ArrowError>;
 }
 
@@ -56,7 +54,6 @@ fn resize(pool: &mut Box<MemoryPool>, page: *const u8, size: i64, capacity: i64,
 }
 
 fn reserve(pool: &mut Box<MemoryPool>, page: *const u8, capacity: i64, new_capacity: i64) -> Result<(*const u8, i64), ArrowError> {
-  println!("reserve");
   if new_capacity > capacity {
     let new_capacity = bit_util::round_up_to_multiple_of_64(new_capacity);
     match pool.reallocate(capacity, new_capacity, page) {
@@ -143,10 +140,6 @@ impl ResizableBuffer<PoolBuffer> for PoolBuffer {
     }
   }
 
-  fn grow(&mut self, new_size: i64) -> Result<&mut PoolBuffer, ArrowError> {
-    self.reserve(new_size)
-  }
-
   fn reserve(&mut self, new_capacity: i64) -> Result<&mut PoolBuffer, ArrowError> {
     match reserve(&mut self.pool, self.page, self.capacity, new_capacity) {
       Ok((new_page, new_capacity)) => {
@@ -165,6 +158,16 @@ impl Drop for PoolBuffer {
       self.pool.free(self.page, self.capacity);
     }
   }
+}
+
+pub trait TypedBufferBuilder<T> {
+  fn append_typed_val(&mut self, val: T) -> Result<&mut TypedBufferBuilder<T>, ArrowError>;
+
+  fn append_typed_vals(&mut self, vals: *const T, num_vals: i64) -> Result<&mut TypedBufferBuilder<T>, ArrowError>;
+
+  fn unsafe_append_typed_val(&mut self, val: T);
+
+  fn unsafe_append_typed_vals(&mut self, vals: *const T, num_vals: i64);
 }
 
 pub struct BufferBuilder {
@@ -190,9 +193,8 @@ impl BufferBuilder {
     } else {
       let old_capacity = self.capacity;
       match resize(&mut self.pool, self.page, self.size, self.capacity, elements) {
-        Ok((new_page, new_size, new_capacity)) => {
+        Ok((new_page, _, new_capacity)) => {
           self.page = new_page;
-          self.size = new_size;
           self.capacity = new_capacity;
           if new_capacity > old_capacity {
             unsafe {
@@ -220,13 +222,11 @@ impl BufferBuilder {
 
   pub fn append(&mut self, data: *const u8, len: i64) -> Result<&mut BufferBuilder, ArrowError> {
     if self.capacity < len + self.size {
-      match resize(&mut self.pool, self.page, self.size, self.capacity, self.size + len) {
-        Ok((new_page, new_size, new_capacity)) => {
-          self.page = new_page;
-          self.size = new_size;
-          self.capacity = new_capacity;
-          self.unsafe_append(data, len);
-          Ok(self)
+      let new_capacity = bit_util::next_power_2(len + self.size);
+      match self.resize(new_capacity) {
+        Ok(buffer_builder) => {
+          buffer_builder.unsafe_append(data, len);
+          Ok(buffer_builder)
         },
         Err(e) => Err(e)
       }
@@ -234,17 +234,6 @@ impl BufferBuilder {
       self.unsafe_append(data, len);
       Ok(self)
     }
-  }
-
-  pub fn append_arith_vals<T>(&mut self, arith_vals: *const T, num_elements: i64) -> Result<&mut BufferBuilder, ArrowError> where T: Num {
-    self.append(
-      unsafe { mem::transmute::<*const T, *const u8>(arith_vals) },
-      num_elements * mem::size_of::<T>() as i64
-    )
-  }
-
-  pub fn append_arith_val<T>(&mut self, arith_val: T) -> Result<&mut BufferBuilder, ArrowError> where T: Num {
-    self.append_arith_vals(&arith_val, 1)
   }
 
   pub fn advance(&mut self, len: i64) -> Result<&mut BufferBuilder, ArrowError> {
@@ -281,5 +270,33 @@ impl BufferBuilder {
 
   pub fn finish(self) -> PoolBuffer {
     PoolBuffer::from(self.pool, self.page, self.size, self.capacity)
+  }
+}
+
+impl<T> TypedBufferBuilder<T> for BufferBuilder {
+
+  fn append_typed_val(&mut self, val: T) -> Result<&mut TypedBufferBuilder<T>, ArrowError> {
+    self.append_typed_vals(&val, 1)
+  }
+
+  fn append_typed_vals(&mut self, vals: *const T, num_vals: i64) -> Result<&mut TypedBufferBuilder<T>, ArrowError> {
+    match self.append(
+      unsafe { mem::transmute::<*const T, *const u8>(vals) },
+      num_vals * mem::size_of::<T>() as i64
+    ) {
+      Ok(buffer_builder) => Ok(buffer_builder),
+      Err(e) => Err(e)
+    }
+  }
+
+  fn unsafe_append_typed_val(&mut self, val: T) {
+    self.unsafe_append_typed_vals(&val, 1)
+  }
+
+  fn unsafe_append_typed_vals(&mut self, vals: *const T, num_vals: i64) {
+    self.unsafe_append(
+      unsafe { mem::transmute::<*const T, *const u8>(vals) },
+      num_vals * mem::size_of::<T>() as i64
+    )
   }
 }

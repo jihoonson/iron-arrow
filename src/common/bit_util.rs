@@ -13,3 +13,15 @@ pub fn round_up_to_multiple_of_64(val: i64) -> i64 {
     val
   }
 }
+
+#[inline]
+pub fn next_power_2(val: i64) -> i64 {
+  let mut n = val - 1;
+  n |= n >> 1;
+  n |= n >> 2;
+  n |= n >> 4;
+  n |= n >> 8;
+  n |= n >> 16;
+  n |= n >> 32;
+  return n + 1;
+}
