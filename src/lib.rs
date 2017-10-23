@@ -106,4 +106,18 @@ mod tests {
     assert_eq!(&ty, data.ty());
     assert_eq!(100, data.len());
   }
+
+  #[test]
+  fn test_null_array() {
+    use common::ty::DataType;
+    use array::{ArrayData, NullArray};
+
+    let ty = DataType::null();
+    let data = ArrayData::new(&ty, 100, 0, 0);
+    let arr = NullArray::with_data(data);
+
+    assert_eq!(100, arr.len());
+    assert_eq!(0, arr.offset());
+    assert!(arr.is_null(37));
+  }
 }

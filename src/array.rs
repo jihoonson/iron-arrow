@@ -4,6 +4,9 @@ use memory_pool::MemoryPool;
 use common::ty::DataType;
 use buffer::{Buffer, PoolBuffer};
 
+use std::ptr;
+
+#[derive(Eq, PartialEq)]
 pub struct ArrayData<'a> {
   ty: &'a DataType, // TODO: box? or ref?
   length: i64,
@@ -67,4 +70,55 @@ impl<'a> ArrayData<'a> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum ArrayType {
 
+}
+
+macro_rules! define_base_array {
+    ($name: ident) => {
+      #[derive(Eq, PartialEq)]
+      pub struct $name<'a> {
+        data: ArrayData<'a>,
+        null_bitmap_data: *const u8
+      }
+
+      impl<'a> $name<'a> {
+        pub fn is_null(&self, i: i64) -> bool {
+          self.null_bitmap_data.is_null() || bit_util::bit_not_set(self.null_bitmap_data, i + self.data.offset())
+        }
+
+        pub fn len(&self) -> i64 {
+          self.data.len()
+        }
+
+        pub fn offset(&self) -> i64 {
+          self.data.offset()
+        }
+
+        pub fn data(&self) -> &ArrayData {
+          &self.data
+        }
+
+        pub fn null_bitmap_data(&self) -> &*const u8 {
+          &self.null_bitmap_data
+        }
+      }
+    };
+}
+
+define_base_array!(NullArray);
+
+impl <'a> NullArray<'a> {
+  pub fn with_data(array_data: ArrayData<'a>) -> NullArray<'a> {
+    let null_data = ArrayData {
+      ty: array_data.ty,
+      length: array_data.length,
+      null_count: array_data.length,
+      offset: 0,
+      buffers: array_data.buffers,
+      children: array_data.children
+    };
+    NullArray {
+      data: null_data,
+      null_bitmap_data: ptr::null()
+    }
+  }
 }

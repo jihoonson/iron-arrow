@@ -85,7 +85,7 @@ pub struct PoolBuffer {
 impl PoolBuffer {
   pub fn new(pool: Box<MemoryPool>) -> PoolBuffer {
     PoolBuffer {
-      pool: pool,
+      pool,
       page: unsafe { mem::uninitialized() },
       size: 0,
       capacity: 0,
@@ -119,6 +119,20 @@ impl PoolBuffer {
     self.page
   }
 }
+
+impl PartialEq for PoolBuffer {
+  fn eq(&self, other: &PoolBuffer) -> bool {
+    self.size == other.size &&
+      (unsafe { self.page == other.page ||
+        libc::memcmp(
+          mem::transmute::<*const u8, *const libc::c_void>(self.page),
+          mem::transmute::<*const u8, *const libc::c_void>(other.page),
+          self.size as usize
+        ) == 0})
+  }
+}
+
+impl Eq for PoolBuffer {}
 
 impl MutableBuffer for PoolBuffer {
   #[inline]
