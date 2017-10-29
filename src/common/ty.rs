@@ -385,6 +385,33 @@ impl DataType {
   as_type_info!(as_union_info, UnionType, DataType::UnionType);
   as_type_info!(as_dictionary_info, DictionaryType, DataType::DictionaryType);
 
+  pub fn as_fixed_width_type_info(&self) -> &FixedWidthType {
+    match self {
+      &DataType::Int8Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::Int16Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::Int32Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::Int64Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::UInt8Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::UInt16Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::UInt32Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::UInt64Type { type_info: ref type_info } => type_info as &FixedWidthType,
+
+      &DataType::HalfFloatType { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::FloatType { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::DoubleType { type_info: ref type_info } => type_info as &FixedWidthType,
+
+      &DataType::Date32Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::Date64Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::Time32Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::Time64Type { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::TimestampType { type_info: ref type_info } => type_info as &FixedWidthType,
+      &DataType::IntervalType { type_info: ref type_info } => type_info as &FixedWidthType,
+
+      &DataType::DictionaryType { type_info: ref type_info } => type_info as &FixedWidthType,
+      _ => panic!()
+    }
+  }
+
   pub fn is_integer(ty: &Ty) -> bool {
     match ty {
       &Ty::Int8 => true,

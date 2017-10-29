@@ -1,7 +1,7 @@
 use common::status::ArrowError;
 use common::bit_util;
 use memory_pool::MemoryPool;
-use common::ty::DataType;
+use common::ty::{DataType, FixedWidthType};
 use buffer::{Buffer, PoolBuffer};
 
 use std::ptr;
@@ -72,6 +72,10 @@ pub enum ArrayType {
 
 }
 
+pub trait Array {
+
+}
+
 macro_rules! define_base_array {
     ($name: ident) => {
       #[derive(Eq, PartialEq)]
@@ -91,6 +95,10 @@ macro_rules! define_base_array {
 
         pub fn offset(&self) -> i64 {
           self.data.offset()
+        }
+
+        pub fn ty(&self) -> &DataType {
+          self.data.ty()
         }
 
         pub fn data(&self) -> &ArrayData {
@@ -122,3 +130,53 @@ impl <'a> NullArray<'a> {
     }
   }
 }
+
+macro_rules! impl_primitive_array {
+    ($name: ident) => {
+      impl<'a> $name<'a> {
+        pub fn with_data(array_data: ArrayData<'a>) -> $name<'a> {
+          let value_buffer = &array_data.buffers[1];
+          $name {
+            data: array_data,
+            null_bitmap_data: if array_data.buffers.len() > 0 && !value_buffer.is_null() {
+              value_buffer.data()
+            } else {
+              ptr::null()
+            }
+          }
+        }
+
+        pub fn values(&self) -> &Box<PoolBuffer> {
+          &self.data.buffers[1]
+        }
+
+        pub fn raw_values(&self) -> *const u8 {
+          // raw_values = data->buffers[1]->data()
+          if Box::into_raw(*self.value_buffer()).is_null() {
+            ptr::null()
+          } else {
+            let offset = self.offset() * self.ty().as_fixed_width_type_info().get_bit_width() as i64 / 8;
+            self.data.buffers[1].data().offset(offset as isize)
+          }
+        }
+
+        fn value_buffer(&self) -> &Box<PoolBuffer> {
+          &self.data.buffers[1]
+        }
+      }
+    }
+}
+
+define_base_array!(BoolArray);
+//impl_primitive_array!(BoolArray);
+
+//impl <'a> BoolArray<'a> {
+//  pub fn value(&self, i: i64) -> bool {
+//    let raw_value_buffer = Box::into_raw(*self.value_buffer());
+//    if raw_value_buffer.is_null() {
+//      panic!()
+//    } else {
+//      bit_util::get_bit((*raw_value_buffer).data(), i + self.data.offset())
+//    }
+//  }
+//}
