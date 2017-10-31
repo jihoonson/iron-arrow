@@ -65,6 +65,10 @@ impl<'a> ArrayData<'a> {
   pub fn offset(&self) -> i64 {
     self.offset
   }
+
+  pub fn to_array<T: Array<'a>>(self) -> Box<T> {
+    Box::new(T::from_data(self))
+  }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -72,8 +76,8 @@ pub enum ArrayType {
 
 }
 
-pub trait Array {
-
+pub trait Array<'a> {
+  fn from_data<T: Array<'a>>(data: ArrayData<'a>) -> T;
 }
 
 macro_rules! define_base_array {
@@ -128,6 +132,12 @@ impl <'a> NullArray<'a> {
       data: null_data,
       null_bitmap_data: ptr::null()
     }
+  }
+}
+
+impl <'a> Array<'a> for NullArray<'a> {
+  fn from_data<T: Array<'a>>(data: ArrayData<'a>) -> T {
+    NullArray::with_data(data)
   }
 }
 

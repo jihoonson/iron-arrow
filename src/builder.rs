@@ -3,6 +3,7 @@ use buffer::PoolBuffer;
 use array::Array;
 use common::status::ArrowError;
 use ty::DataType;
+use common::bit_util;
 
 pub trait ArrayBuilder<T> {
   fn child(&self, i: i32) -> &ArrayBuilder<T>;
@@ -15,10 +16,6 @@ pub trait ArrayBuilder<T> {
 
   fn null_bitmap(&self) -> Box<PoolBuffer>;
 
-  fn append_to_bitmap(&self, is_valid: bool) -> Result<&ArrayBuilder<T>, ArrowError>;
-  fn append_vector_to_bitmap(&self, valid_bytes: *const u8, length: i64) -> Result<&ArrowBuilder<T>, ArrowError>;
-  fn set_not_null(&self, length: i64) -> Result<&ArrowBuilder<T>, ArrowError>;
-
   fn init(&self, capacity: i64) -> Result<&ArrowBuilder<T>, ArrowError>;
   fn resize(&self, new_bits: i64) -> Result<&ArrowBuilder<T>, ArrowError>;
   fn reserve(&self, elements: i64) -> Result<&ArrowBuilder<T>, ArrowError>;
@@ -27,12 +24,32 @@ pub trait ArrayBuilder<T> {
 
   fn reset(&self);
 
-  unsafe fn unsafe_append_to_bitmap(&self, is_valid: bool);
-  unsafe fn unsafe_append_vector_to_bitmap(&self, valid_bytes: *const u8, length: i64);
-  unsafe fn unsafe_set_not_null(&self, length: i64);
+  unsafe fn append_to_bitmap(&self, is_valid: bool);
+  unsafe fn append_vector_to_bitmap(&self, valid_bytes: *const u8, length: i64);
+  unsafe fn set_not_null(&self, length: i64);
+}
+
+pub fn append_to_bitmap(builder: &mut ArrayBuilder<T>, is_valid: bool) -> Result<&ArrayBuilder<T>, ArrowError> {
+  if builder.length() == builder.capacity() {
+    let resize_result = builder.resize(bit_util::next_power_2(builder.capacity() + 1));
+    if resize_result.is_err() {
+      return resize_result;
+    }
+  }
+  unsafe { builder.append_to_bitmap(is_valid); }
+  Ok(builder)
+}
+
+pub fn append_vector_to_bitmap(builder: &mut ArrayBuilder<T>, valid_bytes: *const u8, length: i64) -> Result<&ArrowBuilder<T>, ArrowError> {
+  Ok(builder)
+}
+
+pub fn set_not_null(builder: &mut ArrayBuilder<T>, length: i64) -> Result<&ArrowBuilder<T>, ArrowError> {
+  Ok(builder)
 }
 
 pub struct NullBuilder {
+  ty: DataType,
   null_count: i64,
   length: i64
 }
@@ -40,6 +57,7 @@ pub struct NullBuilder {
 impl NullBuilder {
   pub fn new(pool: Box<MemoryPool>) -> NullBuilder {
     NullBuilder {
+      ty: DataType::null(),
       null_count: 0,
       length: 0
     }
@@ -62,51 +80,39 @@ impl ArrayBuilder<u8> for NullBuilder {
   }
 
   fn ty(&self) -> Box<DataType> {
-    unimplemented!()
+    self.ty
   }
 
   fn length(&self) -> i64 {
-    unimplemented!()
+    self.length
   }
 
   fn null_count(&self) -> i64 {
-    unimplemented!()
+    self.null_count
   }
 
   fn capacity(&self) -> i64 {
-    unimplemented!()
+    self.length
   }
 
   fn null_bitmap(&self) -> Box<PoolBuffer> {
     unimplemented!()
   }
 
-  fn append_to_bitmap(&self, is_valid: bool) -> Result<&ArrayBuilder<T>, ArrowError> {
-    unimplemented!()
-  }
-
-  fn append_vector_to_bitmap(&self, valid_bytes: *const u8, length: i64) -> Result<&ArrowBuilder<T>, ArrowError> {
-    unimplemented!()
-  }
-
-  fn set_not_null(&self, length: i64) -> Result<&ArrowBuilder<T>, ArrowError> {
-    unimplemented!()
-  }
-
   fn init(&self, capacity: i64) -> Result<&ArrowBuilder<T>, ArrowError> {
-    unimplemented!()
+    Ok(self)
   }
 
   fn resize(&self, new_bits: i64) -> Result<&ArrowBuilder<T>, ArrowError> {
-    unimplemented!()
+    Ok(self)
   }
 
   fn reserve(&self, elements: i64) -> Result<&ArrowBuilder<T>, ArrowError> {
-    unimplemented!()
+    Ok(self)
   }
 
   fn advance(&self, elements: i64) -> Result<&ArrowBuilder<T>, ArrowError> {
-    unimplemented!()
+    Ok(self)
   }
 
   fn finish(&self) -> Result<Box<Array>, ArrowError> {
@@ -114,18 +120,18 @@ impl ArrayBuilder<u8> for NullBuilder {
   }
 
   fn reset(&self) {
+
+  }
+
+  fn append_to_bitmap(&self, is_valid: bool) {
     unimplemented!()
   }
 
-  fn unsafe_append_to_bitmap(&self, is_valid: bool) {
+  fn append_vector_to_bitmap(&self, valid_bytes: *const u8, length: i64) {
     unimplemented!()
   }
 
-  fn unsafe_append_vector_to_bitmap(&self, valid_bytes: *const u8, length: i64) {
-    unimplemented!()
-  }
-
-  fn unsafe_set_not_null(&self, length: i64) {
+  fn set_not_null(&self, length: i64) {
     unimplemented!()
   }
 }

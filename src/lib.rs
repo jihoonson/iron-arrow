@@ -120,4 +120,15 @@ mod tests {
     assert_eq!(0, arr.offset());
     assert!(arr.is_null(37));
   }
+
+  #[test]
+  fn test_null_builder() {
+    use builder::{ArrayBuilder, NullBuilder};
+
+    let mut pool = DefaultMemoryPool::new();
+    let builder = NullBuilder::new(Box::new(pool));
+    for i in 0..10 {
+      builder.append_null();
+    }
+  }
 }
