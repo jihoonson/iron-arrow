@@ -2,6 +2,81 @@ pub mod status;
 pub mod ty;
 pub mod bit_util;
 
+use std::collections::HashMap;
+
+#[derive(Eq, PartialEq)]
+pub struct KeyValueMetadata {
+  keys: Vec<String>,
+  values: Vec<String>
+}
+
+impl KeyValueMetadata {
+  pub fn new() -> KeyValueMetadata {
+    KeyValueMetadata {
+      keys: Vec::new(),
+      values: Vec::new()
+    }
+  }
+
+  pub fn with_kvs(keys: Vec<String>, values: Vec<String>) -> KeyValueMetadata {
+    KeyValueMetadata {
+      keys,
+      values
+    }
+  }
+
+  pub fn append(&mut self, key: String, val: String) {
+    self.keys.push(key);
+    self.values.push(val);
+  }
+
+  pub fn reserve(&mut self, n: i64) {
+    if n >= 0 {
+      let m = n as usize;
+      self.keys.reserve(m);
+      self.values.reserve(m);
+    } else {
+      panic!();
+    }
+  }
+
+  pub fn key(&self, i: i64) -> &String {
+    &self.keys[i as usize]
+  }
+
+  pub fn value(&self, i: i64) -> &String {
+    &self.values[i as usize]
+  }
+
+  pub fn len(&self) -> i64 {
+    if self.keys.len() == self.values.len() {
+      self.keys.len() as i64
+    } else {
+      panic!();
+    }
+  }
+
+  pub fn to_unordered_map(&self) -> HashMap<String, String> {
+    let len = self.len() as usize;
+    let mut map = HashMap::with_capacity(len);
+
+    for i in 0..len {
+      map.insert(self.keys[i].clone(), self.values[i].clone());
+    }
+
+    map
+  }
+}
+
+impl Clone for KeyValueMetadata {
+  fn clone(&self) -> Self {
+    KeyValueMetadata {
+      keys: self.keys.clone(),
+      values: self.values.clone()
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use common::status::{StatusCode, ArrowError};
