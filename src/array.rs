@@ -6,7 +6,7 @@
 //
 //use std::ptr;
 
-pub trait Array {
+pub trait Array: Eq + PartialEq + Clone + ToString {
 
 }
 

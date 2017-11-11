@@ -85,7 +85,7 @@ pub enum Ty {
   Dictionary
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum TimeUnit {
   Second,
   Milli,
@@ -93,7 +93,7 @@ pub enum TimeUnit {
   Nano
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum BufferType {
   Data,
   Offset,
@@ -101,53 +101,60 @@ pub enum BufferType {
   Validity
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct BufferDesc {
   ty: BufferType,
   bit_width: i32
 }
 
 impl BufferDesc {
-  fn new(ty: BufferType, bit_width: i32) -> BufferDesc {
+  pub fn new(ty: BufferType, bit_width: i32) -> BufferDesc {
     BufferDesc {
       ty,
       bit_width
     }
   }
 
-  fn k_validity_buffer() -> BufferDesc {
+  pub fn k_validity_buffer() -> BufferDesc {
     BufferDesc {
       ty: BufferType::Validity,
       bit_width: 1
     }
   }
 
-  fn k_offset_buffer() -> BufferDesc {
+  pub fn k_offset_buffer() -> BufferDesc {
     BufferDesc {
       ty: BufferType::Offset,
       bit_width: 32
     }
   }
 
-  fn k_type_buffer() -> BufferDesc {
+  pub fn k_type_buffer() -> BufferDesc {
     BufferDesc {
       ty: BufferType::Type,
       bit_width: 32
     }
   }
+
+  pub fn k_data_buffer(bit_width: i32) -> BufferDesc {
+    BufferDesc {
+      ty: BufferType::Data,
+      bit_width
+    }
+  }
 }
 
 // Required to implement this trait for every data types
-pub trait DataType : ToString {
-  fn get_type(&self) -> Ty;
+pub trait DataType : Eq + PartialEq + Clone + ToString {
+  fn ty(&self) -> Ty;
   fn get_buffer_layout(&self) -> Vec<BufferDesc>;
   fn name(&self) -> &str;
 }
 
 // Required to implement this trait for structured data types
-pub trait NestedType : DataType {
-  fn child(&self, i: usize) -> &Box<Field>;
-  fn get_children(&self) -> &Vec<Box<Field>>;
+pub trait NestedType<T: DataType> : DataType {
+  fn child(&self, i: usize) -> &Field<T>;
+  fn get_children(&self) -> &Vec<Field<T>>;
   fn num_children(&self) -> i32;
 }
 
@@ -196,7 +203,17 @@ macro_rules! impl_default_traits {
   }
 }
 
-#[derive(Eq, PartialEq)]
+macro_rules! impl_default_traits_for_generics {
+  ($data_type: ident) => {
+    impl <T: DataType> ToString for $data_type<T> {
+      fn to_string(&self) -> String {
+        String::from(self.name())
+      }
+    }
+  }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct NullType {}
 
 impl NullType {
@@ -206,7 +223,7 @@ impl NullType {
 }
 
 impl DataType for NullType {
-  fn get_type(&self) -> Ty {
+  fn ty(&self) -> Ty {
     Ty::NA
   }
 
@@ -226,6 +243,7 @@ impl Visit for NullType {
   }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct BooleanType {}
 
 impl BooleanType {
@@ -235,7 +253,7 @@ impl BooleanType {
 }
 
 impl DataType for BooleanType {
-  fn get_type(&self) -> Ty {
+  fn ty(&self) -> Ty {
     Ty::Bool
   }
 
@@ -256,6 +274,8 @@ impl FixedWidthType for BooleanType {
 
 macro_rules! define_integer {
   ($type_name: ident, $ty: path, $name: expr, $bit_width: expr, $signed: expr) => {
+
+    #[derive(Debug, Eq, PartialEq, Clone)]
     pub struct $type_name {}
 
     impl $type_name {
@@ -265,7 +285,7 @@ macro_rules! define_integer {
     }
 
     impl DataType for $type_name {
-      fn get_type(&self) -> Ty {
+      fn ty(&self) -> Ty {
         $ty
       }
 
@@ -296,6 +316,8 @@ macro_rules! define_integer {
 
 macro_rules! define_float {
   ($type_name: ident, $ty: path, $name: expr, $bit_width: expr, $precision: path) => {
+
+    #[derive(Debug, Eq, PartialEq, Clone)]
     pub struct $type_name {}
 
     impl $type_name {
@@ -305,7 +327,7 @@ macro_rules! define_float {
     }
 
     impl DataType for $type_name {
-      fn get_type(&self) -> Ty {
+      fn ty(&self) -> Ty {
         $ty
       }
 
@@ -347,28 +369,29 @@ define_float!(HalfFloatType, Ty::HalfFloat, "halffloat", 16, Precision::Half);
 define_float!(FloatType, Ty::Float, "float", 32, Precision::Single);
 define_float!(DoubleType, Ty::Double, "double", 64, Precision::Double);
 
-pub struct ListType {
-  value_field: Box<Field>
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ListType<T: DataType> {
+  value_field: Box<Field<T>>
 }
 
-impl ListType {
-  pub fn new(value_field: Box<Field>) -> ListType {
+impl <T: DataType> ListType<T> {
+  pub fn new(value_field: Box<Field<T>>) -> ListType<T> {
     ListType {
       value_field
     }
   }
 
-  pub fn value_field(&self) -> &Box<Field> {
+  pub fn value_field(&self) -> &Box<Field<T>> {
     &self.value_field
   }
 
-  pub fn value_type(&self) -> &Box<DataType> {
+  pub fn value_type(&self) -> &T {
     &self.value_field.get_type()
   }
 }
 
-impl DataType for ListType {
-  fn get_type(&self) -> Ty {
+impl <T: DataType> DataType for ListType<T> {
+  fn ty(&self) -> Ty {
     Ty::List
   }
 
@@ -381,6 +404,7 @@ impl DataType for ListType {
   }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct BinaryType {}
 
 impl BinaryType {
@@ -390,7 +414,7 @@ impl BinaryType {
 }
 
 impl DataType for BinaryType {
-  fn get_type(&self) -> Ty {
+  fn ty(&self) -> Ty {
     Ty::Binary
   }
 
@@ -403,6 +427,7 @@ impl DataType for BinaryType {
   }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct FixedSizedBinaryType {
   byte_width: i32
 }
@@ -420,7 +445,7 @@ impl FixedSizedBinaryType {
 }
 
 impl DataType for FixedSizedBinaryType {
-  fn get_type(&self) -> Ty {
+  fn ty(&self) -> Ty {
     Ty::FixedSizedBinary
   }
 
@@ -439,6 +464,7 @@ impl FixedWidthType for FixedSizedBinaryType {
   }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StringType {}
 
 impl StringType {
@@ -448,7 +474,7 @@ impl StringType {
 }
 
 impl DataType for StringType {
-  fn get_type(&self) -> Ty {
+  fn ty(&self) -> Ty {
     Ty::String
   }
 
@@ -461,20 +487,21 @@ impl DataType for StringType {
   }
 }
 
-pub struct StructType {
-  fields: Vec<Box<Field>>
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct StructType<T: DataType> {
+  fields: Vec<Field<T>>
 }
 
-impl StructType {
-  pub fn new(fields: Vec<Box<Field>>) -> StructType {
+impl <T: DataType> StructType<T> {
+  pub fn new(fields: Vec<Field<T>>) -> StructType<T> {
     StructType {
       fields
     }
   }
 }
 
-impl DataType for StructType {
-  fn get_type(&self) -> Ty {
+impl <T: DataType> DataType for StructType<T> {
+  fn ty(&self) -> Ty {
     Ty::Struct
   }
 
@@ -487,12 +514,12 @@ impl DataType for StructType {
   }
 }
 
-impl NestedType for StructType {
-  fn child(&self, i: usize) -> &Box<Field> {
+impl <T: DataType> NestedType<T> for StructType<T> {
+  fn child(&self, i: usize) -> &Field<T> {
     &self.fields[i]
   }
 
-  fn get_children(&self) -> &Vec<Box<Field>> {
+  fn get_children(&self) -> &Vec<Field<T>> {
     &self.fields
   }
 
@@ -501,6 +528,16 @@ impl NestedType for StructType {
   }
 }
 
+impl <T: DataType> Index<usize> for StructType<T> {
+  type Output = Field<T>;
+
+  #[inline]
+  fn index(&self, index: usize) -> &Field<T> {
+    &self.fields[index]
+  }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct DecimalType {
   precision: i32,
   scale: i32
@@ -524,7 +561,7 @@ impl DecimalType {
 }
 
 impl DataType for DecimalType {
-  fn get_type(&self) -> Ty {
+  fn ty(&self) -> Ty {
     Ty::Decimal
   }
 
@@ -543,14 +580,15 @@ impl FixedWidthType for DecimalType {
   }
 }
 
-pub struct UnionType {
-  fields: Vec<Box<Field>>,
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct UnionType<T: DataType> {
+  fields: Vec<Field<T>>,
   type_codes: Vec<u8>,
   mode: UnionMode
 }
 
-impl UnionType {
-  pub fn new(fields: Vec<Box<Field>>, type_codes: Vec<u8>) -> UnionType {
+impl <T: DataType> UnionType<T> {
+  pub fn new(fields: Vec<Field<T>>, type_codes: Vec<u8>) -> UnionType<T> {
     UnionType {
       fields,
       type_codes,
@@ -558,7 +596,7 @@ impl UnionType {
     }
   }
 
-  pub fn with_mode(fields: Vec<Box<Field>>, type_codes: Vec<u8>, mode: UnionMode) -> UnionType {
+  pub fn with_mode(fields: Vec<Field<T>>, type_codes: Vec<u8>, mode: UnionMode) -> UnionType<T> {
     UnionType {
       fields,
       type_codes,
@@ -575,8 +613,8 @@ impl UnionType {
   }
 }
 
-impl DataType for UnionType {
-  fn get_type(&self) -> Ty {
+impl <T: DataType> DataType for UnionType<T> {
+  fn ty(&self) -> Ty {
     Ty::Union
   }
 
@@ -592,12 +630,12 @@ impl DataType for UnionType {
   }
 }
 
-impl NestedType for UnionType {
-  fn child(&self, i: usize) -> &Box<Field> {
+impl <T: DataType> NestedType<T> for UnionType<T> {
+  fn child(&self, i: usize) -> &Field<T> {
     &self.fields[i]
   }
 
-  fn get_children(&self) -> &Vec<Box<Field>> {
+  fn get_children(&self) -> &Vec<Field<T>> {
     &self.fields
   }
 
@@ -606,6 +644,7 @@ impl NestedType for UnionType {
   }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum DateUnit {
   Day,
   Milli
@@ -617,6 +656,7 @@ pub trait DateType : FixedWidthType {
 
 macro_rules! define_date_type {
     ($type_name: ident, $ty: path, $name: expr, $bit_width: expr) => {
+        #[derive(Debug, Eq, PartialEq, Clone)]
         pub struct $type_name {
           unit: DateUnit
         }
@@ -630,7 +670,7 @@ macro_rules! define_date_type {
         }
 
         impl DataType for $type_name {
-          fn get_type(&self) -> Ty {
+          fn ty(&self) -> Ty {
             $ty
           }
 
@@ -667,6 +707,7 @@ pub trait TimeType : FixedWidthType {
 
 macro_rules! define_time_type {
     ($type_name: ident, $ty: path, $name: expr, $bit_width: expr) => {
+        #[derive(Debug, Eq, PartialEq, Clone)]
         pub struct $type_name {
           unit: TimeUnit
         }
@@ -686,7 +727,7 @@ macro_rules! define_time_type {
         }
 
         impl DataType for $type_name {
-          fn get_type(&self) -> Ty {
+          fn ty(&self) -> Ty {
             $ty
           }
 
@@ -716,6 +757,7 @@ macro_rules! define_time_type {
 define_time_type!(Time32Type, Ty::Time32, "time32", 32);
 define_time_type!(Time64Type, Ty::Time64, "time64", 64);
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct TimestampType {
   unit: TimeUnit,
   timezone: String
@@ -753,7 +795,7 @@ impl TimestampType {
 }
 
 impl DataType for TimestampType {
-  fn get_type(&self) -> Ty {
+  fn ty(&self) -> Ty {
     Ty::Timestamp
   }
 
@@ -772,6 +814,7 @@ impl FixedWidthType for TimestampType {
   }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct IntervalType {
   unit: IntervalUnit
 }
@@ -791,7 +834,7 @@ impl IntervalType {
 }
 
 impl DataType for IntervalType {
-  fn get_type(&self) -> Ty {
+  fn ty(&self) -> Ty {
     Ty::Interval
   }
 
@@ -810,14 +853,15 @@ impl FixedWidthType for IntervalType {
   }
 }
 
-pub struct DictionaryType {
-  index_type: Box<Integer>,
-  dictionary: Box<Array>,
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct DictionaryType<T: Integer, A: Array> {
+  index_type: Box<T>,
+  dictionary: Box<A>,
   ordered: bool
 }
 
-impl DictionaryType {
-  pub fn unordered(index_type: Box<Integer>, dictionary: Box<Array>) -> DictionaryType {
+impl <T: Integer, A: Array> DictionaryType<T, A> {
+  pub fn unordered(index_type: Box<T>, dictionary: Box<A>) -> DictionaryType<T, A> {
     DictionaryType {
       index_type,
       dictionary,
@@ -825,7 +869,7 @@ impl DictionaryType {
     }
   }
 
-  pub fn ordered(index_type: Box<Integer>, dictionary: Box<Array>) -> DictionaryType {
+  pub fn ordered(index_type: Box<T>, dictionary: Box<A>) -> DictionaryType<T, A> {
     DictionaryType {
       index_type,
       dictionary,
@@ -833,11 +877,11 @@ impl DictionaryType {
     }
   }
 
-  pub fn index_type(&self) -> &Box<Integer> {
+  pub fn zindex_type(&self) -> &Box<T> {
     &self.index_type
   }
 
-  pub fn dictionary(&self) -> &Box<Array> {
+  pub fn dictionary(&self) -> &Box<A> {
     &self.dictionary
   }
 
@@ -846,8 +890,8 @@ impl DictionaryType {
   }
 }
 
-impl DataType for DictionaryType {
-  fn get_type(&self) -> Ty {
+impl <T: Integer, A: Array> DataType for DictionaryType<T, A> {
+  fn ty(&self) -> Ty {
     Ty::Dictionary
   }
 
@@ -860,9 +904,15 @@ impl DataType for DictionaryType {
   }
 }
 
-impl FixedWidthType for DictionaryType {
+impl <T: Integer, A: Array> FixedWidthType for DictionaryType<T, A> {
   fn bit_width(&self) -> i32 {
     self.index_type.bit_width()
+  }
+}
+
+impl <T: Integer, A: Array> ToString for DictionaryType<T, A> {
+  fn to_string(&self) -> String {
+    String::from(self.name())
   }
 }
 
@@ -896,22 +946,20 @@ impl_default_traits!(Int64Type);
 impl_default_traits!(HalfFloatType);
 impl_default_traits!(FloatType);
 impl_default_traits!(DoubleType);
-impl_default_traits!(ListType);
 impl_default_traits!(BinaryType);
 impl_default_traits!(FixedSizedBinaryType);
 impl_default_traits!(StringType);
-impl_default_traits!(StructType);
 impl_default_traits!(DecimalType);
-impl_default_traits!(UnionType);
 impl_default_traits!(Date32Type);
 impl_default_traits!(Date64Type);
 impl_default_traits!(Time32Type);
 impl_default_traits!(Time64Type);
 impl_default_traits!(TimestampType);
 impl_default_traits!(IntervalType);
-impl_default_traits!(DictionaryType);
 
-
+impl_default_traits_for_generics!(ListType);
+impl_default_traits_for_generics!(UnionType);
+impl_default_traits_for_generics!(StructType);
 
 //#[derive(Debug, Eq, PartialEq)]
 //pub enum DataType {
@@ -1545,7 +1593,7 @@ pub enum Precision {
 //impl_arrow_type!(TimestampType);
 //impl_fixed_width_type!(TimestampType);
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum IntervalUnit {
   YearMonth,
   DayTime
@@ -1661,7 +1709,7 @@ pub enum IntervalUnit {
 //impl_arrow_type!(StructType);
 //impl_nested_type!(StructType);
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum UnionMode {
   SPARSE,
   DENSE
@@ -1750,41 +1798,42 @@ pub enum UnionMode {
 //  }
 //}
 
-fn clone_data_type(data_type: &Box<DataType>) -> Box<DataType> {
-  let clone = unsafe {
-    let size = std::mem::size_of_val(data_type.as_ref());
-    let p = std::libc::malloc(size);
-    std::libc::memcpy(p, std::mem::transmute::<&DataType, *const std::libc::c_void>(data_type.as_ref()), size)
-  };
+//fn clone_data_type(data_type: &Box<DataType>) -> Box<DataType> {
+//  let clone = unsafe {
+//    let size = std::mem::size_of_val(data_type.as_ref());
+//    let p = std::libc::malloc(size);
+//    std::libc::memcpy(p, std::mem::transmute::<&DataType, *const std::libc::c_void>(data_type.as_ref()), size)
+//  };
+//
+//  Box::new(clone)
+//}
 
-  Box::new(clone)
-}
-
-pub struct Field {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Field<T: DataType> {
   name: String,
-  ty: Box<DataType>,
+  ty: T,
   nullable: bool,
-  metadata: Option<Box<KeyValueMetadata>>
+  metadata: Option<KeyValueMetadata>
 }
 
-impl Field {
-  pub fn new(name: String, ty: Box<DataType>) -> Field {
+impl <T: DataType> Field<T> {
+  pub fn new(name: String, ty: T) -> Field<T> {
     Field::create(name, ty, true, Option::None)
   }
 
-  pub fn non_nullable(name: String, ty: Box<DataType>) -> Field {
+  pub fn non_nullable(name: String, ty: T) -> Field<T> {
     Field::create(name, ty, false, Option::None)
   }
 
-  pub fn with_metadata(name: String, ty: Box<DataType>, metadata: Box<KeyValueMetadata>) -> Field {
+  pub fn with_metadata(name: String, ty: T, metadata: KeyValueMetadata) -> Field<T> {
     Field::create(name, ty, true, Option::from(metadata))
   }
 
-  pub fn non_nullable_with_metadata(name: String, ty: Box<DataType>, metadata: Box<KeyValueMetadata>) -> Field {
+  pub fn non_nullable_with_metadata(name: String, ty: T, metadata: KeyValueMetadata) -> Field<T> {
     Field::create(name, ty, false, Option::from(metadata))
   }
 
-  fn create(name: String, ty: Box<DataType>, nullable: bool, metadata: Option<Box<KeyValueMetadata>>) -> Field {
+  fn create(name: String, ty: T, nullable: bool, metadata: Option<KeyValueMetadata>) -> Field<T> {
     Field {
       name,
       ty,
@@ -1797,7 +1846,7 @@ impl Field {
     &self.name
   }
 
-  pub fn get_type(&self) -> &Box<DataType> {
+  pub fn get_type(&self) -> &T {
     &self.ty
   }
 
@@ -1805,24 +1854,20 @@ impl Field {
     self.nullable
   }
 
-  pub fn add_metadata(&self, metadata: Box<KeyValueMetadata>) -> Field {
-    Field::create(self.name.clone(), clone_data_type(&self.ty), self.nullable, Option::from(metadata))
+  pub fn add_metadata(&self, metadata: KeyValueMetadata) -> Field<T> {
+    Field::create(self.name.clone(), self.ty.clone(), self.nullable, Option::from(metadata))
   }
 
-  pub fn remove_metadata(&self) -> Field {
-    Field::create(self.name.clone(), clone_data_type(&self.ty), self.nullable, Option::None)
+  pub fn remove_metadata(&self) -> Field<T> {
+    Field::create(self.name.clone(), self.ty.clone(), self.nullable, Option::None)
   }
-}
 
-impl PartialEq for Field {
-  fn eq(&self, other: &Field) -> bool {
-    unimplemented!()
+  pub fn get_metadata(&self) -> &Option<KeyValueMetadata> {
+    &self.metadata
   }
 }
 
-impl Eq for Field {}
-
-impl ToString for Field {
+impl <T: DataType> ToString for Field<T> {
   fn to_string(&self) -> String {
     let str = self.name.clone() + ": " + self.ty.to_string().as_str();
     if self.nullable {
