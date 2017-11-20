@@ -2,12 +2,13 @@ use std::ops::Index;
 
 use common::status::ArrowError;
 use common::field::Field;
+use array;
 use array::Array;
 
 #[macro_use]
 use std;
 use std::mem;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter, Error};
 
 /// Data types in this library are all *logical*. They can be expressed as
 /// either a primitive physical type (bytes or bits of some fixed size), a
@@ -155,15 +156,135 @@ pub trait DataType {
   fn box_clone(&self) -> Box<DataType>;
 }
 
+pub trait Downcast {
+  fn as_null(&self) -> &NullType {
+    panic!("Cannot cast to null")
+  }
+
+  fn as_bool(&self) -> &BooleanType {
+    panic!("Cannot cast to bool")
+  }
+
+  fn as_uint8(&self) -> &UInt8Type  {
+    panic!("Cannot cast to uint8")
+  }
+
+  fn as_int8(&self) -> &Int8Type  {
+    panic!("Cannot cast to int8")
+  }
+
+  fn as_uint16(&self) -> &UInt16Type  {
+    panic!("Cannot cast to uint16")
+  }
+
+  fn as_int16(&self) -> &Int16Type  {
+    panic!("Cannot cast to int16")
+  }
+
+  fn as_uint32(&self) -> &UInt32Type  {
+    panic!("Cannot cast to uint32")
+  }
+
+  fn as_int32(&self) -> &Int32Type  {
+    panic!("Cannot cast to int32")
+  }
+
+  fn as_uint64(&self) -> &UInt64Type  {
+    panic!("Cannot cast to uint64")
+  }
+
+  fn as_int64(&self) -> &Int64Type  {
+    panic!("Cannot cast to int64")
+  }
+
+  fn as_half_float(&self) -> &HalfFloatType  {
+    panic!("Cannot cast to half_float")
+  }
+
+  fn as_float(&self) -> &FloatType  {
+    panic!("Cannot cast to float")
+  }
+
+  fn as_double(&self) -> &DoubleType  {
+    panic!("Cannot cast to double")
+  }
+
+  fn as_string(&self) -> &StringType  {
+    panic!("Cannot cast to string")
+  }
+
+  fn as_binary(&self) -> &BinaryType  {
+    panic!("Cannot cast to binary")
+  }
+
+  fn as_fixed_sized_binary(&self) -> &FixedSizedBinaryType  {
+    panic!("Cannot cast to fixed_sized_binary")
+  }
+
+  fn as_date64(&self) -> &Date64Type  {
+    panic!("Cannot cast to date64")
+  }
+
+  fn as_date32(&self) -> &Date32Type  {
+    panic!("Cannot cast to date32")
+  }
+
+  fn as_timestamp(&self) -> &TimestampType  {
+    panic!("Cannot cast to timestamp")
+  }
+
+  fn as_time32(&self) -> &Time32Type  {
+    panic!("Cannot cast to time32")
+  }
+
+  fn as_time64(&self) -> &Time64Type  {
+    panic!("Cannot cast to time64")
+  }
+
+  fn as_interval(&self) -> &IntervalType  {
+    panic!("Cannot cast to interval")
+  }
+
+  fn as_decimal(&self) -> &DecimalType  {
+    panic!("Cannot cast to decimal")
+  }
+
+  fn as_list(&self) -> &ListType  {
+    panic!("Cannot cast to list")
+  }
+
+  fn as_struct(&self) -> &StructType  {
+    panic!("Cannot cast to struct")
+  }
+
+  fn as_union(&self) -> &UnionType  {
+    panic!("Cannot cast to union")
+  }
+
+  fn as_dictionary(&self) -> &DictionaryType  {
+    panic!("Cannot cast to dictionary")
+  }
+}
+
+macro_rules! define_downcast {
+    ($data_type: ident, $method_name: ident) => {
+      fn $method_name(&self) -> &$data_type {
+        &self
+      }
+    };
+}
+
+pub trait DowncastDataType : DataType + Downcast {}
+
 // Required to implement this trait for structured data types
-pub trait NestedType : DataType {
+pub trait NestedType : DowncastDataType {
   fn child(&self, i: usize) -> &Box<Field>;
   fn get_children(&self) -> &Vec<Box<Field>>;
   fn num_children(&self) -> i32;
 }
 
 // Required to implement this trait for fixed-size data types
-pub trait FixedWidthType : DataType {
+pub trait FixedWidthType : DowncastDataType {
   fn bit_width(&self) -> i32;
 }
 
@@ -171,6 +292,10 @@ pub trait Number : FixedWidthType {}
 
 pub trait Integer : Number {
   fn is_signed(&self) -> bool;
+}
+
+fn eq_integer(i1: &Integer, i2: &Integer) -> bool {
+  unimplemented!()
 }
 
 pub trait FloatingPoint : Number {
@@ -184,6 +309,28 @@ impl Clone for Box<DataType> {
 }
 
 impl Clone for Box<Integer> {
+  fn clone(&self) -> Self {
+    unimplemented!()
+  }
+}
+
+impl PartialEq for Box<Integer> {
+  fn eq(&self, other: &Self) -> bool {
+    unimplemented!()
+  }
+}
+
+impl Eq for Box<Integer> {
+
+}
+
+impl Debug for Box<Integer> {
+  fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+    unimplemented!()
+  }
+}
+
+impl Clone for Box<Array> {
   fn clone(&self) -> Self {
     unimplemented!()
   }
@@ -210,22 +357,20 @@ pub trait Visit: Sized {
 }
 
 macro_rules! impl_default_traits {
-  ($data_type: ident) => {
+  ($data_type: ident, $method_name: ident) => {
     impl ToString for $data_type {
       fn to_string(&self) -> String {
         String::from(self.name())
       }
     }
-  }
-}
 
-macro_rules! impl_default_traits_for_generics {
-  ($data_type: ident) => {
-    impl ToString for $data_type {
-      fn to_string(&self) -> String {
-        String::from(self.name())
+    impl Downcast for $data_type {
+      fn $method_name(&self) -> &$data_type {
+        &self
       }
     }
+
+    impl DowncastDataType for $data_type {}
   }
 }
 
@@ -417,7 +562,7 @@ impl ListType {
     &self.value_field
   }
 
-  pub fn value_type(&self) -> &DataType {
+  pub fn value_type(&self) -> &DowncastDataType {
     self.value_field.get_type()
   }
 }
@@ -939,15 +1084,15 @@ impl FixedWidthType for IntervalType {
   }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct DictionaryType<T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> {
-  index_type: Box<T>,
-  dictionary: Box<A>,
+#[derive(Debug, Clone)]
+pub struct DictionaryType {
+  index_type: Box<Integer>,
+  dictionary: Box<Array>,
   ordered: bool
 }
 
-impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> DictionaryType<T, A> {
-  pub fn unordered(index_type: Box<T>, dictionary: Box<A>) -> DictionaryType<T, A> {
+impl DictionaryType {
+  pub fn unordered(index_type: Box<Integer>, dictionary: Box<Array>) -> DictionaryType {
     DictionaryType {
       index_type,
       dictionary,
@@ -955,7 +1100,7 @@ impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> Dictiona
     }
   }
 
-  pub fn ordered(index_type: Box<T>, dictionary: Box<A>) -> DictionaryType<T, A> {
+  pub fn ordered(index_type: Box<Integer>, dictionary: Box<Array>) -> DictionaryType {
     DictionaryType {
       index_type,
       dictionary,
@@ -963,11 +1108,11 @@ impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> Dictiona
     }
   }
 
-  pub fn index_type(&self) -> &Box<T> {
+  pub fn index_type(&self) -> &Box<Integer> {
     &self.index_type
   }
 
-  pub fn dictionary(&self) -> &Box<A> {
+  pub fn dictionary(&self) -> &Box<Array> {
     &self.dictionary
   }
 
@@ -976,13 +1121,7 @@ impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> Dictiona
   }
 }
 
-impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> Clone for DictionaryType<T, A> {
-  fn clone(&self) -> Self {
-    unimplemented!()
-  }
-}
-
-impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> DataType for DictionaryType<T, A> {
+impl DataType for DictionaryType {
   fn ty(&self) -> Ty {
     Ty::Dictionary
   }
@@ -1000,16 +1139,35 @@ impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> DataType
   }
 }
 
-impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> FixedWidthType for DictionaryType<T, A> {
+impl FixedWidthType for DictionaryType {
   fn bit_width(&self) -> i32 {
     self.index_type.bit_width()
   }
 }
-impl <T: Integer + PartialEq + 'static, A: Array + PartialEq + 'static> ToString for DictionaryType<T, A> {
-  fn to_string(&self) -> String {
-    String::from(self.name())
+
+impl PartialEq for DictionaryType {
+  fn eq(&self, other: &Self) -> bool {
+    eq_integer(self.index_type.as_ref(), other.index_type.as_ref()) &&
+      array::array_eq(self.dictionary.as_ref(), other.dictionary.as_ref()) &&
+      self.ordered == other.ordered
   }
 }
+
+impl Eq for DictionaryType {}
+
+//impl ToString for DictionaryType {
+//  fn to_string(&self) -> String {
+//    String::from(self.name())
+//  }
+//}
+//
+//impl Downcast for DictionaryType {
+//  fn as_dictionary(&self) -> &DictionaryType {
+//    &self
+//  }
+//}
+//
+//impl DowncastDataType for DictionaryType {}
 
 
 impl Visit for BooleanType {
@@ -1028,33 +1186,33 @@ impl Visit for UInt8Type {
 
 // TODO: impl Visit
 
-impl_default_traits!(NullType);
-impl_default_traits!(BooleanType);
-impl_default_traits!(UInt8Type);
-impl_default_traits!(UInt16Type);
-impl_default_traits!(UInt32Type);
-impl_default_traits!(UInt64Type);
-impl_default_traits!(Int8Type);
-impl_default_traits!(Int16Type);
-impl_default_traits!(Int32Type);
-impl_default_traits!(Int64Type);
-impl_default_traits!(HalfFloatType);
-impl_default_traits!(FloatType);
-impl_default_traits!(DoubleType);
-impl_default_traits!(BinaryType);
-impl_default_traits!(FixedSizedBinaryType);
-impl_default_traits!(StringType);
-impl_default_traits!(DecimalType);
-impl_default_traits!(Date32Type);
-impl_default_traits!(Date64Type);
-impl_default_traits!(Time32Type);
-impl_default_traits!(Time64Type);
-impl_default_traits!(TimestampType);
-impl_default_traits!(IntervalType);
-
-impl_default_traits_for_generics!(ListType);
-impl_default_traits_for_generics!(UnionType);
-impl_default_traits_for_generics!(StructType);
+impl_default_traits!(NullType, as_null);
+impl_default_traits!(BooleanType, as_bool);
+impl_default_traits!(UInt8Type, as_uint8);
+impl_default_traits!(UInt16Type, as_uint16);
+impl_default_traits!(UInt32Type, as_uint32);
+impl_default_traits!(UInt64Type, as_uint64);
+impl_default_traits!(Int8Type, as_int8);
+impl_default_traits!(Int16Type, as_int16);
+impl_default_traits!(Int32Type, as_int32);
+impl_default_traits!(Int64Type, as_int64);
+impl_default_traits!(HalfFloatType, as_half_float);
+impl_default_traits!(FloatType, as_float);
+impl_default_traits!(DoubleType, as_double);
+impl_default_traits!(BinaryType, as_binary);
+impl_default_traits!(FixedSizedBinaryType, as_fixed_sized_binary);
+impl_default_traits!(StringType, as_string);
+impl_default_traits!(DecimalType, as_decimal);
+impl_default_traits!(Date32Type, as_date32);
+impl_default_traits!(Date64Type, as_date64);
+impl_default_traits!(Time32Type, as_time32);
+impl_default_traits!(Time64Type, as_time64);
+impl_default_traits!(TimestampType, as_timestamp);
+impl_default_traits!(IntervalType, as_interval);
+impl_default_traits!(ListType, as_list);
+impl_default_traits!(UnionType, as_union);
+impl_default_traits!(StructType, as_struct);
+impl_default_traits!(DictionaryType, as_dictionary);
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Precision {

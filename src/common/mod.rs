@@ -272,7 +272,8 @@ mod tests {
     assert_eq!(Ty::Timestamp, ty.value_field().get_type().ty());
     assert!(ty.value_field().nullable());
 
-    let casted = unsafe { std::mem::transmute::<&DataType, &TimestampType>(ty.value_field().get_type()) };
+    let timestamp_ty = ty.value_type().as_timestamp();
+    assert_eq!(&TimestampType::new(), timestamp_ty);
   }
 
 //  #[test]

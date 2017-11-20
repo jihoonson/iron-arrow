@@ -1,11 +1,11 @@
 use common::KeyValueMetadata;
-use common::ty::{Ty, DataType, NullType, FloatType, Int64Type, ListType, TimestampType};
+use common::ty::{Ty, DowncastDataType, NullType, FloatType, Int64Type, ListType, TimestampType};
 
 use std::fmt::{Debug, Formatter, Error};
 
 pub trait Field {
   fn get_name(&self) -> &String;
-  fn get_type(&self) -> &DataType;
+  fn get_type(&self) -> &DowncastDataType;
   fn nullable(&self) -> bool;
 }
 
@@ -85,7 +85,7 @@ macro_rules! define_field {
           &self.name
         }
 
-        fn get_type(&self) -> &DataType {
+        fn get_type(&self) -> &DowncastDataType {
           &self.ty
         }
 
@@ -152,7 +152,7 @@ impl Field for ListField {
     &self.name
   }
 
-  fn get_type(&self) -> &DataType {
+  fn get_type(&self) -> &DowncastDataType {
     &self.ty
   }
 

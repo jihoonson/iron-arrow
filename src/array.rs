@@ -6,9 +6,32 @@
 //
 //use std::ptr;
 
+use std::fmt::{Debug, Formatter, Error};
+
 pub trait Array {
 
 }
+
+pub fn array_eq(a1: &Array, a2: &Array) -> bool {
+  unimplemented!()
+}
+
+impl PartialEq for Box<Array> {
+  fn eq(&self, other: &Self) -> bool {
+    unimplemented!()
+  }
+}
+
+impl Eq for Box<Array> {
+
+}
+
+impl Debug for Box<Array> {
+  fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+    unimplemented!()
+  }
+}
+
 
 
 //
