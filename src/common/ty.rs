@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use common::status::ArrowError;
-use common::field::Field;
+use common::field::{DowncastField};
 use array;
 use array::Array;
 
@@ -88,6 +88,31 @@ pub enum Ty {
   Dictionary
 }
 
+impl Ty {
+  pub fn is_integer(&self) -> bool {
+    match self {
+      &Ty::Int8 => true,
+      &Ty::Int16 => true,
+      &Ty::Int32 => true,
+      &Ty::Int64 => true,
+      &Ty::UInt8 => true,
+      &Ty::UInt16 => true,
+      &Ty::UInt32 => true,
+      &Ty::UInt64 => true,
+      _ => false
+    }
+  }
+
+  pub fn is_float(&self) -> bool {
+    match self {
+      &Ty::HalfFloat => true,
+      &Ty::Float => true,
+      &Ty::Double => true,
+      _ => false
+    }
+  }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum TimeUnit {
   Second,
@@ -154,6 +179,14 @@ pub trait DataType {
   fn name(&self) -> &str;
 
   fn box_clone(&self) -> Box<DataType>;
+
+  fn is_integer(&self) -> bool {
+    false
+  }
+
+  fn is_float(&self) -> bool {
+    false
+  }
 }
 
 pub trait Downcast {
@@ -278,8 +311,8 @@ pub trait DowncastDataType : DataType + Downcast {}
 
 // Required to implement this trait for structured data types
 pub trait NestedType : DowncastDataType {
-  fn child(&self, i: usize) -> &Box<Field>;
-  fn get_children(&self) -> &Vec<Box<Field>>;
+  fn child(&self, i: usize) -> &Box<DowncastField>;
+  fn get_children(&self) -> &Vec<Box<DowncastField>>;
   fn num_children(&self) -> i32;
 }
 
@@ -326,12 +359,6 @@ impl Eq for Box<Integer> {
 
 impl Debug for Box<Integer> {
   fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-    unimplemented!()
-  }
-}
-
-impl Clone for Box<Array> {
-  fn clone(&self) -> Self {
     unimplemented!()
   }
 }
@@ -469,6 +496,10 @@ macro_rules! define_integer {
       fn box_clone(&self) -> Box<DataType> {
         Box::from(self.clone())
       }
+
+      fn is_integer(&self) -> bool {
+        true
+      }
    }
 
     impl FixedWidthType for $type_name {
@@ -515,6 +546,10 @@ macro_rules! define_float {
       fn box_clone(&self) -> Box<DataType> {
         Box::from(self.clone())
       }
+
+      fn is_float(&self) -> bool {
+        true
+      }
    }
 
     impl FixedWidthType for $type_name {
@@ -548,17 +583,17 @@ define_float!(DoubleType, Ty::Double, "double", 64, Precision::Double);
 
 #[derive(Debug, Clone)]
 pub struct ListType {
-  value_field: Box<Field>
+  value_field: Box<DowncastField>
 }
 
 impl ListType {
-  pub fn new(value_field: Box<Field>) -> ListType {
+  pub fn new(value_field: Box<DowncastField>) -> ListType {
     ListType {
       value_field
     }
   }
 
-  pub fn value_field(&self) -> &Box<Field> {
+  pub fn value_field(&self) -> &Box<DowncastField> {
     &self.value_field
   }
 
@@ -692,11 +727,11 @@ impl DataType for StringType {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StructType {
-  fields: Vec<Box<Field>>
+  fields: Vec<Box<DowncastField>>
 }
 
 impl StructType {
-  pub fn new(fields: Vec<Box<Field>>) -> StructType {
+  pub fn new(fields: Vec<Box<DowncastField>>) -> StructType {
     StructType {
       fields
     }
@@ -722,11 +757,11 @@ impl DataType for StructType {
 }
 
 impl NestedType for StructType {
-  fn child(&self, i: usize) -> &Box<Field> {
+  fn child(&self, i: usize) -> &Box<DowncastField> {
     &self.fields[i]
   }
 
-  fn get_children(&self) -> &Vec<Box<Field>> {
+  fn get_children(&self) -> &Vec<Box<DowncastField>> {
     &self.fields
   }
 
@@ -736,10 +771,10 @@ impl NestedType for StructType {
 }
 
 impl Index<usize> for StructType {
-  type Output = Box<Field>;
+  type Output = Box<DowncastField>;
 
   #[inline]
-  fn index(&self, index: usize) -> &Box<Field> {
+  fn index(&self, index: usize) -> &Box<DowncastField> {
     &self.fields[index]
   }
 }
@@ -793,13 +828,13 @@ impl FixedWidthType for DecimalType {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct UnionType {
-  fields: Vec<Box<Field>>,
+  fields: Vec<Box<DowncastField>>,
   type_codes: Vec<u8>,
   mode: UnionMode
 }
 
 impl UnionType {
-  pub fn new(fields: Vec<Box<Field>>, type_codes: Vec<u8>) -> UnionType {
+  pub fn new(fields: Vec<Box<DowncastField>>, type_codes: Vec<u8>) -> UnionType {
     UnionType {
       fields,
       type_codes,
@@ -807,7 +842,7 @@ impl UnionType {
     }
   }
 
-  pub fn with_mode(fields: Vec<Box<Field>>, type_codes: Vec<u8>, mode: UnionMode) -> UnionType {
+  pub fn with_mode(fields: Vec<Box<DowncastField>>, type_codes: Vec<u8>, mode: UnionMode) -> UnionType {
     UnionType {
       fields,
       type_codes,
@@ -846,16 +881,25 @@ impl DataType for UnionType {
 }
 
 impl NestedType for UnionType {
-  fn child(&self, i: usize) -> &Box<Field> {
+  fn child(&self, i: usize) -> &Box<DowncastField> {
     &self.fields[i]
   }
 
-  fn get_children(&self) -> &Vec<Box<Field>> {
+  fn get_children(&self) -> &Vec<Box<DowncastField>> {
     &self.fields
   }
 
   fn num_children(&self) -> i32 {
     self.fields.len() as i32
+  }
+}
+
+impl Index<usize> for UnionType {
+  type Output = Box<DowncastField>;
+
+  #[inline]
+  fn index(&self, index: usize) -> &Box<DowncastField> {
+    &self.fields[index]
   }
 }
 
@@ -932,6 +976,11 @@ macro_rules! define_time_type {
         }
 
         impl $type_name {
+          #[inline]
+          pub fn default_unit() -> TimeUnit {
+            TimeUnit::Milli
+          }
+
           pub fn new() -> $type_name {
             $type_name {
               unit: TimeUnit::Milli
@@ -987,6 +1036,14 @@ pub struct TimestampType {
 }
 
 impl TimestampType {
+  pub fn default_unit() -> TimeUnit {
+    TimeUnit::Milli
+  }
+
+  pub fn default_timezone() -> String {
+    String::new()
+  }
+
   pub fn new() -> TimestampType {
     TimestampType {
       unit: TimeUnit::Milli,
@@ -1105,6 +1162,14 @@ impl DictionaryType {
       index_type,
       dictionary,
       ordered: true
+    }
+  }
+
+  pub fn new(index_type: Box<Integer>, dictionary: Box<Array>, ordered: bool) -> DictionaryType {
+    DictionaryType {
+      index_type,
+      dictionary,
+      ordered
     }
   }
 

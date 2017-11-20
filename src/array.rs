@@ -32,6 +32,12 @@ impl Debug for Box<Array> {
   }
 }
 
+impl Clone for Box<Array> {
+  fn clone(&self) -> Self {
+    unimplemented!()
+  }
+}
+
 
 
 //

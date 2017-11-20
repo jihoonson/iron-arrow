@@ -276,178 +276,121 @@ mod tests {
     assert_eq!(&TimestampType::new(), timestamp_ty);
   }
 
-//  #[test]
-//  fn test_struct() {
-//    let ty = StructType::new(
-//      vec![Field::new(String::from("f1"), Box::new(Date32Type::new(DateUnit::Day))), Field::new(String::from("f2"), Box::new(Int32Type::new()))]
-//    );
-//    assert_eq!(Ty::Struct, ty.ty());
-//    assert_eq!("struct", ty.name());
-//    assert_eq!(vec![BufferDesc::k_validity_buffer()], ty.get_buffer_layout());
-//    assert_eq!(2, ty.num_children());
-//    assert_eq!(&Field::new(String::from("f1"), Box::new(Date32Type::new(DateUnit::Day))), ty.child(0));
-//    assert_eq!(&Field::new(String::from("f2"), Box::new(Int32Type::new())), ty.child(1));
-//    assert_eq!(
-//      &vec![Field::new(String::from("f1"), Box::new(Date32Type::new(DateUnit::Day))), Field::new(String::from("f2"), Box::new(Int32Type::new()))],
-//      ty.get_children()
-//    );
-//    assert_eq!(Field::new(String::from("f1"), Box::new(Date32Type::new(DateUnit::Day))), ty[0]);
-//    assert_eq!(Field::new(String::from("f2"), Box::new(Int32Type::new())), ty[1]);
-//  }
+  #[test]
+  fn test_struct() {
+    let ty = StructType::new(
+      vec![
+        Box::new(Date32Field::new(String::from("f1"), DateUnit::Day)),
+        Box::new(Int32Field::new(String::from("f2")))
+      ]
+    );
+    assert_eq!(Ty::Struct, ty.ty());
+    assert_eq!("struct", ty.name());
+    assert_eq!(vec![BufferDesc::k_validity_buffer()], ty.get_buffer_layout());
+    assert_eq!(2, ty.num_children());
+    assert_eq!(&Date32Field::new(String::from("f1"), DateUnit::Day), ty.child(0).as_date32());
+    assert_eq!(&Int32Field::new(String::from("f2")), ty.child(1).as_int32());
+    assert_eq!(&Date32Field::new(String::from("f1"), DateUnit::Day), ty[0].as_date32());
+    assert_eq!(&Int32Field::new(String::from("f2")), ty[1].as_int32());
+  }
 
-//  #[test]
-//  fn test_union() {
-//    let ty = DataType::sparse_union(
-//      vec![Field::basic("f1", DataType::date32()), Field::basic("f2", DataType::int32())],
-//      vec![0, 1, 2]
-//    );
-//    let info = ty.as_union_info();
-//    assert_eq!(&Ty::Union, info.get_type());
-//    assert_eq!(&String::from("union"), info.get_name());
-//    assert_eq!(&vec![0, 1, 2], info.type_codes());
-//    assert_eq!(2, info.num_children());
-//    assert_eq!(&Field::basic("f1", DataType::date32()), info.child(0));
-//    assert_eq!(&Field::basic("f2", DataType::int32()), info.child(1));
-//    assert_eq!(&vec![Field::basic("f1", DataType::date32()), Field::basic("f2", DataType::int32())],
-//    info.get_children());
-//    assert_eq!(Field::basic("f1", DataType::date32()), info[0]);
-//    assert_eq!(Field::basic("f2", DataType::int32()), info[1]);
-//
-//    assert_eq!(&UnionMode::SPARSE, info.mode());
-//    assert_eq!(&vec![K_VALIDITY_BUFFER, K_TYPE_BUFFER], info.get_buffer_layout());
-//
-//    let ty = DataType::dense_union(
-//      vec![Field::basic("f1", DataType::date32()), Field::basic("f2", DataType::int32())],
-//      vec![0, 1, 2]
-//    );
-//    let info = ty.as_union_info();
-//    assert_eq!(&UnionMode::DENSE, info.mode());
-//    assert_eq!(&vec![K_VALIDITY_BUFFER, K_TYPE_BUFFER, K_OFFSET_BUFFER], info.get_buffer_layout());
-//  }
-//
-//  // TODO: dictionary type test
-//
-//  #[test]
-//  fn test_is_integer() {
-//    assert!(DataType::is_integer(&Ty::UInt8));
-//    assert!(DataType::is_integer(&Ty::UInt16));
-//    assert!(DataType::is_integer(&Ty::UInt32));
-//    assert!(DataType::is_integer(&Ty::UInt64));
-//    assert!(DataType::is_integer(&Ty::Int8));
-//    assert!(DataType::is_integer(&Ty::Int16));
-//    assert!(DataType::is_integer(&Ty::Int32));
-//    assert!(DataType::is_integer(&Ty::Int64));
-//
-//    assert_eq!(false, DataType::is_integer(&Ty::Null));
-//    assert_eq!(false, DataType::is_integer(&Ty::Bool));
-//    assert_eq!(false, DataType::is_integer(&Ty::HalfFloat));
-//    assert_eq!(false, DataType::is_integer(&Ty::Float));
-//    assert_eq!(false, DataType::is_integer(&Ty::Double));
-//    assert_eq!(false, DataType::is_integer(&Ty::String));
-//    assert_eq!(false, DataType::is_integer(&Ty::Binary));
-//    assert_eq!(false, DataType::is_integer(&Ty::Date64));
-//    assert_eq!(false, DataType::is_integer(&Ty::Date32));
-//    assert_eq!(false, DataType::is_integer(&Ty::Timestamp));
-//    assert_eq!(false, DataType::is_integer(&Ty::Time32));
-//    assert_eq!(false, DataType::is_integer(&Ty::Time64));
-//    assert_eq!(false, DataType::is_integer(&Ty::Interval));
-//    assert_eq!(false, DataType::is_integer(&Ty::Decimal));
-//    assert_eq!(false, DataType::is_integer(&Ty::List));
-//    assert_eq!(false, DataType::is_integer(&Ty::Struct));
-//    assert_eq!(false, DataType::is_integer(&Ty::Union));
-//    assert_eq!(false, DataType::is_integer(&Ty::Dictionary));
-//  }
-//
-//  #[test]
-//  fn test_is_float() {
-//    assert!(DataType::is_float(&Ty::HalfFloat));
-//    assert!(DataType::is_float(&Ty::Float));
-//    assert!(DataType::is_float(&Ty::Double));
-//
-//    assert_eq!(false, DataType::is_float(&Ty::Null));
-//    assert_eq!(false, DataType::is_float(&Ty::Bool));
-//    assert_eq!(false, DataType::is_float(&Ty::UInt8));
-//    assert_eq!(false, DataType::is_float(&Ty::UInt16));
-//    assert_eq!(false, DataType::is_float(&Ty::UInt32));
-//    assert_eq!(false, DataType::is_float(&Ty::UInt64));
-//    assert_eq!(false, DataType::is_float(&Ty::Int8));
-//    assert_eq!(false, DataType::is_float(&Ty::Int16));
-//    assert_eq!(false, DataType::is_float(&Ty::Int32));
-//    assert_eq!(false, DataType::is_float(&Ty::Int64));
-//    assert_eq!(false, DataType::is_float(&Ty::String));
-//    assert_eq!(false, DataType::is_float(&Ty::Binary));
-//    assert_eq!(false, DataType::is_float(&Ty::Date64));
-//    assert_eq!(false, DataType::is_float(&Ty::Date32));
-//    assert_eq!(false, DataType::is_float(&Ty::Timestamp));
-//    assert_eq!(false, DataType::is_float(&Ty::Time32));
-//    assert_eq!(false, DataType::is_float(&Ty::Time64));
-//    assert_eq!(false, DataType::is_float(&Ty::Interval));
-//    assert_eq!(false, DataType::is_float(&Ty::Decimal));
-//    assert_eq!(false, DataType::is_float(&Ty::List));
-//    assert_eq!(false, DataType::is_float(&Ty::Struct));
-//    assert_eq!(false, DataType::is_float(&Ty::Union));
-//    assert_eq!(false, DataType::is_float(&Ty::Dictionary));
-//  }
-//
-//  #[test]
-//  fn test_is_primitive() {
-//    assert!(DataType::is_primitive(&Ty::Null));
-//    assert!(DataType::is_primitive(&Ty::Bool));
-//    assert!(DataType::is_primitive(&Ty::UInt8));
-//    assert!(DataType::is_primitive(&Ty::UInt16));
-//    assert!(DataType::is_primitive(&Ty::UInt32));
-//    assert!(DataType::is_primitive(&Ty::UInt64));
-//    assert!(DataType::is_primitive(&Ty::Int8));
-//    assert!(DataType::is_primitive(&Ty::Int16));
-//    assert!(DataType::is_primitive(&Ty::Int32));
-//    assert!(DataType::is_primitive(&Ty::Int64));
-//    assert!(DataType::is_primitive(&Ty::HalfFloat));
-//    assert!(DataType::is_primitive(&Ty::Float));
-//    assert!(DataType::is_primitive(&Ty::Double));
-//    assert!(DataType::is_primitive(&Ty::Date64));
-//    assert!(DataType::is_primitive(&Ty::Date32));
-//    assert!(DataType::is_primitive(&Ty::Timestamp));
-//    assert!(DataType::is_primitive(&Ty::Time32));
-//    assert!(DataType::is_primitive(&Ty::Time64));
-//    assert!(DataType::is_primitive(&Ty::Interval));
-//
-//    assert_eq!(false, DataType::is_primitive(&Ty::String));
-//    assert_eq!(false, DataType::is_primitive(&Ty::Binary));
-//    assert_eq!(false, DataType::is_primitive(&Ty::Decimal));
-//    assert_eq!(false, DataType::is_primitive(&Ty::List));
-//    assert_eq!(false, DataType::is_primitive(&Ty::Struct));
-//    assert_eq!(false, DataType::is_primitive(&Ty::Union));
-//    assert_eq!(false, DataType::is_primitive(&Ty::Dictionary));
-//  }
-//
-//  #[test]
-//  fn test_is_binary_like() {
-//    assert!(DataType::is_binary_like(&Ty::String));
-//    assert!(DataType::is_binary_like(&Ty::Binary));
-//
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Null));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Bool));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::UInt8));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::UInt16));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::UInt32));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::UInt64));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Int8));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Int16));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Int32));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Int64));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::HalfFloat));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Float));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Double));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Date64));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Date32));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Timestamp));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Time32));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Time64));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Interval));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Decimal));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::List));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Struct));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Union));
-//    assert_eq!(false, DataType::is_binary_like(&Ty::Dictionary));
-//  }
+  #[test]
+  fn test_union() {
+    let ty = UnionType::new(
+      vec![
+        Box::new(Date32Field::new(String::from("f1"), DateUnit::Day)),
+        Box::new(Int32Field::new(String::from("f2")))
+      ],
+      vec![0, 1, 2]
+    );
+    assert_eq!(Ty::Union, ty.ty());
+    assert_eq!(&String::from("union"), ty.name());
+    assert_eq!(&vec![0, 1, 2], ty.type_codes());
+    assert_eq!(&UnionMode::SPARSE, ty.mode());
+    assert_eq!(2, ty.num_children());
+    assert_eq!(&Date32Field::new(String::from("f1"), DateUnit::Day), ty.child(0).as_date32());
+    assert_eq!(&Int32Field::new(String::from("f2")), ty.child(1).as_int32());
+    assert_eq!(&Date32Field::new(String::from("f1"), DateUnit::Day), ty[0].as_date32());
+    assert_eq!(&Int32Field::new(String::from("f2")), ty[1].as_int32());
+
+    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer()], ty.get_buffer_layout());
+
+    let ty = UnionType::with_mode(
+      vec![
+        Box::new(Date32Field::new(String::from("f1"), DateUnit::Day)),
+        Box::new(Int32Field::new(String::from("f2")))
+      ],
+      vec![0, 1, 2],
+      UnionMode::DENSE
+    );
+    assert_eq!(&UnionMode::DENSE, ty.mode());
+    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer(), BufferDesc::k_offset_buffer()], ty.get_buffer_layout());
+  }
+
+  #[test]
+  fn test_dictionary() {
+    // TODO
+  }
+
+  #[test]
+  fn test_is_integer() {
+    assert!(Ty::UInt8.is_integer());
+    assert!(Ty::UInt16.is_integer());
+    assert!(Ty::UInt32.is_integer());
+    assert!(Ty::UInt64.is_integer());
+    assert!(Ty::Int8.is_integer());
+    assert!(Ty::Int16.is_integer());
+    assert!(Ty::Int32.is_integer());
+    assert!(Ty::Int64.is_integer());
+
+    assert_eq!(false, Ty::NA.is_integer());
+    assert_eq!(false, Ty::Bool.is_integer());
+    assert_eq!(false, Ty::HalfFloat.is_integer());
+    assert_eq!(false, Ty::Float.is_integer());
+    assert_eq!(false, Ty::Double.is_integer());
+    assert_eq!(false, Ty::String.is_integer());
+    assert_eq!(false, Ty::Binary.is_integer());
+    assert_eq!(false, Ty::Date64.is_integer());
+    assert_eq!(false, Ty::Date32.is_integer());
+    assert_eq!(false, Ty::Timestamp.is_integer());
+    assert_eq!(false, Ty::Time32.is_integer());
+    assert_eq!(false, Ty::Time64.is_integer());
+    assert_eq!(false, Ty::Interval.is_integer());
+    assert_eq!(false, Ty::Decimal.is_integer());
+    assert_eq!(false, Ty::List.is_integer());
+    assert_eq!(false, Ty::Struct.is_integer());
+    assert_eq!(false, Ty::Union.is_integer());
+    assert_eq!(false, Ty::Dictionary.is_integer());
+  }
+
+  #[test]
+  fn test_is_float() {
+    assert!(Ty::HalfFloat.is_float());
+    assert!(Ty::Float.is_float());
+    assert!(Ty::Double.is_float());
+
+    assert_eq!(false, Ty::NA.is_float());
+    assert_eq!(false, Ty::Bool.is_float());
+    assert_eq!(false, Ty::UInt8.is_float());
+    assert_eq!(false, Ty::UInt16.is_float());
+    assert_eq!(false, Ty::UInt32.is_float());
+    assert_eq!(false, Ty::UInt64.is_float());
+    assert_eq!(false, Ty::Int8.is_float());
+    assert_eq!(false, Ty::Int16.is_float());
+    assert_eq!(false, Ty::Int32.is_float());
+    assert_eq!(false, Ty::Int64.is_float());
+    assert_eq!(false, Ty::String.is_float());
+    assert_eq!(false, Ty::Binary.is_float());
+    assert_eq!(false, Ty::Date64.is_float());
+    assert_eq!(false, Ty::Date32.is_float());
+    assert_eq!(false, Ty::Timestamp.is_float());
+    assert_eq!(false, Ty::Time32.is_float());
+    assert_eq!(false, Ty::Time64.is_float());
+    assert_eq!(false, Ty::Interval.is_float());
+    assert_eq!(false, Ty::Decimal.is_float());
+    assert_eq!(false, Ty::List.is_float());
+    assert_eq!(false, Ty::Struct.is_float());
+    assert_eq!(false, Ty::Union.is_float());
+    assert_eq!(false, Ty::Dictionary.is_float());
+  }
 }
