@@ -95,10 +95,10 @@ impl PoolBuffer {
 
   pub fn from(pool: Box<MemoryPool>, page: *const u8, size: i64, capacity: i64) -> PoolBuffer {
     PoolBuffer {
-      pool: pool,
-      page: page,
-      size: size,
-      capacity: capacity,
+      pool,
+      page,
+      size,
+      capacity,
 //      parent: None
     }
   }

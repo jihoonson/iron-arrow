@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use common::status::ArrowError;
-use common::field::{DowncastField};
+use common::field::{Field};
 use array;
 use array::Array;
 
@@ -173,12 +173,12 @@ impl BufferDesc {
 }
 
 // Required to implement this trait for every data types
-pub trait DataType {
+pub trait BaseDataType {
   fn ty(&self) -> Ty;
   fn get_buffer_layout(&self) -> Vec<BufferDesc>;
   fn name(&self) -> &str;
 
-  fn box_clone(&self) -> Box<DataType>;
+  fn box_clone(&self) -> Box<BaseDataType>;
 
   fn is_integer(&self) -> bool {
     false
@@ -189,7 +189,7 @@ pub trait DataType {
   }
 }
 
-pub trait Downcast {
+pub trait Cast {
   fn as_null(&self) -> &NullType {
     panic!("Cannot cast to null")
   }
@@ -299,7 +299,7 @@ pub trait Downcast {
   }
 }
 
-macro_rules! define_downcast {
+macro_rules! define_cast {
     ($data_type: ident, $method_name: ident) => {
       fn $method_name(&self) -> &$data_type {
         &self
@@ -307,17 +307,17 @@ macro_rules! define_downcast {
     };
 }
 
-pub trait DowncastDataType : DataType + Downcast {}
+pub trait DataType: BaseDataType + Cast {}
 
 // Required to implement this trait for structured data types
-pub trait NestedType : DowncastDataType {
-  fn child(&self, i: usize) -> &Box<DowncastField>;
-  fn get_children(&self) -> &Vec<Box<DowncastField>>;
+pub trait NestedType : DataType {
+  fn child(&self, i: usize) -> &Box<Field>;
+  fn get_children(&self) -> &Vec<Box<Field>>;
   fn num_children(&self) -> i32;
 }
 
 // Required to implement this trait for fixed-size data types
-pub trait FixedWidthType : DowncastDataType {
+pub trait FixedWidthType : DataType {
   fn bit_width(&self) -> i32;
 }
 
@@ -335,7 +335,7 @@ pub trait FloatingPoint : Number {
   fn precision(&self) -> Precision;
 }
 
-impl Clone for Box<DataType> {
+impl Clone for Box<BaseDataType> {
   fn clone(&self) -> Self {
     self.box_clone()
   }
@@ -391,13 +391,13 @@ macro_rules! impl_default_traits {
       }
     }
 
-    impl Downcast for $data_type {
+    impl Cast for $data_type {
       fn $method_name(&self) -> &$data_type {
         &self
       }
     }
 
-    impl DowncastDataType for $data_type {}
+    impl DataType for $data_type {}
   }
 }
 
@@ -410,7 +410,7 @@ impl NullType {
   }
 }
 
-impl DataType for NullType {
+impl BaseDataType for NullType {
   fn ty(&self) -> Ty {
     Ty::NA
   }
@@ -423,7 +423,7 @@ impl DataType for NullType {
     "null"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
@@ -444,7 +444,7 @@ impl BooleanType {
   }
 }
 
-impl DataType for BooleanType {
+impl BaseDataType for BooleanType {
   fn ty(&self) -> Ty {
     Ty::Bool
   }
@@ -457,7 +457,7 @@ impl DataType for BooleanType {
     "bool"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
@@ -480,7 +480,7 @@ macro_rules! define_integer {
       }
     }
 
-    impl DataType for $type_name {
+    impl BaseDataType for $type_name {
       fn ty(&self) -> Ty {
         $ty
       }
@@ -493,7 +493,7 @@ macro_rules! define_integer {
         $name
       }
 
-      fn box_clone(&self) -> Box<DataType> {
+      fn box_clone(&self) -> Box<BaseDataType> {
         Box::from(self.clone())
       }
 
@@ -530,7 +530,7 @@ macro_rules! define_float {
       }
     }
 
-    impl DataType for $type_name {
+    impl BaseDataType for $type_name {
       fn ty(&self) -> Ty {
         $ty
       }
@@ -543,7 +543,7 @@ macro_rules! define_float {
         $name
       }
 
-      fn box_clone(&self) -> Box<DataType> {
+      fn box_clone(&self) -> Box<BaseDataType> {
         Box::from(self.clone())
       }
 
@@ -583,26 +583,26 @@ define_float!(DoubleType, Ty::Double, "double", 64, Precision::Double);
 
 #[derive(Debug, Clone)]
 pub struct ListType {
-  value_field: Box<DowncastField>
+  value_field: Box<Field>
 }
 
 impl ListType {
-  pub fn new(value_field: Box<DowncastField>) -> ListType {
+  pub fn new(value_field: Box<Field>) -> ListType {
     ListType {
       value_field
     }
   }
 
-  pub fn value_field(&self) -> &Box<DowncastField> {
+  pub fn value_field(&self) -> &Box<Field> {
     &self.value_field
   }
 
-  pub fn value_type(&self) -> &DowncastDataType {
+  pub fn value_type(&self) -> &DataType {
     self.value_field.get_type()
   }
 }
 
-impl DataType for ListType {
+impl BaseDataType for ListType {
   fn ty(&self) -> Ty {
     Ty::List
   }
@@ -615,7 +615,7 @@ impl DataType for ListType {
     "list"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     unimplemented!()
   }
 }
@@ -639,7 +639,7 @@ impl BinaryType {
   }
 }
 
-impl DataType for BinaryType {
+impl BaseDataType for BinaryType {
   fn ty(&self) -> Ty {
     Ty::Binary
   }
@@ -652,7 +652,7 @@ impl DataType for BinaryType {
     "binary"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
@@ -674,7 +674,7 @@ impl FixedSizedBinaryType {
   }
 }
 
-impl DataType for FixedSizedBinaryType {
+impl BaseDataType for FixedSizedBinaryType {
   fn ty(&self) -> Ty {
     Ty::FixedSizedBinary
   }
@@ -687,7 +687,7 @@ impl DataType for FixedSizedBinaryType {
     "fixed_size_binary"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
@@ -707,7 +707,7 @@ impl StringType {
   }
 }
 
-impl DataType for StringType {
+impl BaseDataType for StringType {
   fn ty(&self) -> Ty {
     Ty::String
   }
@@ -720,25 +720,25 @@ impl DataType for StringType {
     "utf8"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StructType {
-  fields: Vec<Box<DowncastField>>
+  fields: Vec<Box<Field>>
 }
 
 impl StructType {
-  pub fn new(fields: Vec<Box<DowncastField>>) -> StructType {
+  pub fn new(fields: Vec<Box<Field>>) -> StructType {
     StructType {
       fields
     }
   }
 }
 
-impl DataType for StructType {
+impl BaseDataType for StructType {
   fn ty(&self) -> Ty {
     Ty::Struct
   }
@@ -751,17 +751,17 @@ impl DataType for StructType {
     "struct"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
 
 impl NestedType for StructType {
-  fn child(&self, i: usize) -> &Box<DowncastField> {
+  fn child(&self, i: usize) -> &Box<Field> {
     &self.fields[i]
   }
 
-  fn get_children(&self) -> &Vec<Box<DowncastField>> {
+  fn get_children(&self) -> &Vec<Box<Field>> {
     &self.fields
   }
 
@@ -771,10 +771,10 @@ impl NestedType for StructType {
 }
 
 impl Index<usize> for StructType {
-  type Output = Box<DowncastField>;
+  type Output = Box<Field>;
 
   #[inline]
-  fn index(&self, index: usize) -> &Box<DowncastField> {
+  fn index(&self, index: usize) -> &Box<Field> {
     &self.fields[index]
   }
 }
@@ -802,7 +802,7 @@ impl DecimalType {
   }
 }
 
-impl DataType for DecimalType {
+impl BaseDataType for DecimalType {
   fn ty(&self) -> Ty {
     Ty::Decimal
   }
@@ -815,7 +815,7 @@ impl DataType for DecimalType {
     "decimal"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
@@ -828,13 +828,13 @@ impl FixedWidthType for DecimalType {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct UnionType {
-  fields: Vec<Box<DowncastField>>,
+  fields: Vec<Box<Field>>,
   type_codes: Vec<u8>,
   mode: UnionMode
 }
 
 impl UnionType {
-  pub fn new(fields: Vec<Box<DowncastField>>, type_codes: Vec<u8>) -> UnionType {
+  pub fn new(fields: Vec<Box<Field>>, type_codes: Vec<u8>) -> UnionType {
     UnionType {
       fields,
       type_codes,
@@ -842,7 +842,7 @@ impl UnionType {
     }
   }
 
-  pub fn with_mode(fields: Vec<Box<DowncastField>>, type_codes: Vec<u8>, mode: UnionMode) -> UnionType {
+  pub fn with_mode(fields: Vec<Box<Field>>, type_codes: Vec<u8>, mode: UnionMode) -> UnionType {
     UnionType {
       fields,
       type_codes,
@@ -859,7 +859,7 @@ impl UnionType {
   }
 }
 
-impl DataType for UnionType {
+impl BaseDataType for UnionType {
   fn ty(&self) -> Ty {
     Ty::Union
   }
@@ -875,17 +875,17 @@ impl DataType for UnionType {
     "union"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
 
 impl NestedType for UnionType {
-  fn child(&self, i: usize) -> &Box<DowncastField> {
+  fn child(&self, i: usize) -> &Box<Field> {
     &self.fields[i]
   }
 
-  fn get_children(&self) -> &Vec<Box<DowncastField>> {
+  fn get_children(&self) -> &Vec<Box<Field>> {
     &self.fields
   }
 
@@ -895,10 +895,10 @@ impl NestedType for UnionType {
 }
 
 impl Index<usize> for UnionType {
-  type Output = Box<DowncastField>;
+  type Output = Box<Field>;
 
   #[inline]
-  fn index(&self, index: usize) -> &Box<DowncastField> {
+  fn index(&self, index: usize) -> &Box<Field> {
     &self.fields[index]
   }
 }
@@ -928,7 +928,7 @@ macro_rules! define_date_type {
           }
         }
 
-        impl DataType for $type_name {
+        impl BaseDataType for $type_name {
           fn ty(&self) -> Ty {
             $ty
           }
@@ -941,7 +941,7 @@ macro_rules! define_date_type {
             $name
           }
 
-          fn box_clone(&self) -> Box<DataType> {
+          fn box_clone(&self) -> Box<BaseDataType> {
             Box::from(self.clone())
           }
        }
@@ -994,7 +994,7 @@ macro_rules! define_time_type {
           }
         }
 
-        impl DataType for $type_name {
+        impl BaseDataType for $type_name {
           fn ty(&self) -> Ty {
             $ty
           }
@@ -1007,7 +1007,7 @@ macro_rules! define_time_type {
             $name
           }
 
-          fn box_clone(&self) -> Box<DataType> {
+          fn box_clone(&self) -> Box<BaseDataType> {
             Box::from(self.clone())
           }
        }
@@ -1074,7 +1074,7 @@ impl TimestampType {
   }
 }
 
-impl DataType for TimestampType {
+impl BaseDataType for TimestampType {
   fn ty(&self) -> Ty {
     Ty::Timestamp
   }
@@ -1087,7 +1087,7 @@ impl DataType for TimestampType {
     "timestamp"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
@@ -1117,7 +1117,7 @@ impl IntervalType {
   }
 }
 
-impl DataType for IntervalType {
+impl BaseDataType for IntervalType {
   fn ty(&self) -> Ty {
     Ty::Interval
   }
@@ -1130,7 +1130,7 @@ impl DataType for IntervalType {
     "interval"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
@@ -1186,7 +1186,7 @@ impl DictionaryType {
   }
 }
 
-impl DataType for DictionaryType {
+impl BaseDataType for DictionaryType {
   fn ty(&self) -> Ty {
     Ty::Dictionary
   }
@@ -1199,7 +1199,7 @@ impl DataType for DictionaryType {
     "dictionary"
   }
 
-  fn box_clone(&self) -> Box<DataType> {
+  fn box_clone(&self) -> Box<BaseDataType> {
     Box::from(self.clone())
   }
 }
@@ -1219,20 +1219,6 @@ impl PartialEq for DictionaryType {
 }
 
 impl Eq for DictionaryType {}
-
-//impl ToString for DictionaryType {
-//  fn to_string(&self) -> String {
-//    String::from(self.name())
-//  }
-//}
-//
-//impl Downcast for DictionaryType {
-//  fn as_dictionary(&self) -> &DictionaryType {
-//    &self
-//  }
-//}
-//
-//impl DowncastDataType for DictionaryType {}
 
 
 impl Visit for BooleanType {
