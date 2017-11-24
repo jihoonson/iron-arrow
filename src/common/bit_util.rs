@@ -32,3 +32,8 @@ pub fn next_power_2(val: i64) -> i64 {
 pub fn bit_not_set(bits: *const u8, i: i64) -> bool {
   (unsafe { *bits.offset(i as isize / 8) as u8 } & K_BITMASK[i as usize % 8]) == 0
 }
+
+#[inline]
+pub fn get_bit(bits: *const u8, i: i64) -> bool {
+  (unsafe { *bits.offset(i as isize / 8) as u8 } & K_BITMASK[i as usize % 8]) != 0
+}
