@@ -1,7 +1,12 @@
 #![feature(integer_atomics)]
 #![feature(box_syntax, box_patterns)]
+#![feature(pointer_methods)]
+#![feature(core_intrinsics)]
+#![feature(const_size_of)]
+
 extern crate libc;
 extern crate num;
+extern crate rand;
 
 pub mod common;
 pub mod array;
