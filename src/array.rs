@@ -152,9 +152,9 @@ pub trait BaseArray {
     self.data().null_bitmap()
   }
 
-  fn null_bitmap_data(&self) -> *const u8;
-
-  fn data(&self) -> &ArrayData;
+  fn null_bitmap_data(&self) -> *const u8 {
+    self.data().raw_null_bitmap()
+  }
 
   fn values(&self) -> &Box<PoolBuffer> {
     self.data().values()
@@ -163,11 +163,61 @@ pub trait BaseArray {
   fn num_fields(&self) -> i32 {
     self.data().num_children()
   }
+
+  fn data(&self) -> &ArrayData;
 }
 
 pub trait Cast {
   fn as_null(&self) -> &NullArray {
     unimplemented!("Cannot cast to null")
+  }
+
+  fn as_bool(&self) -> &BooleanArray {
+    unimplemented!("Cannot cast to boolean")
+  }
+
+  fn as_int8(&self) -> &Int8Array {
+    unimplemented!("Cannot cast to int8")
+  }
+
+  fn as_int16(&self) -> &Int16Array {
+    unimplemented!("Cannot cast to int16")
+  }
+
+  fn as_int32(&self) -> &Int32Array {
+    unimplemented!("Cannot cast to int32")
+  }
+
+  fn as_int64(&self) -> &Int64Array {
+    unimplemented!("Cannot cast to int64")
+  }
+
+  fn as_uint8(&self) -> &UInt8Array {
+    unimplemented!("Cannot cast to uint8")
+  }
+
+  fn as_uint16(&self) -> &UInt16Array {
+    unimplemented!("Cannot cast to uint16")
+  }
+
+  fn as_uint32(&self) -> &UInt32Array {
+    unimplemented!("Cannot cast to uint32")
+  }
+
+  fn as_uint64(&self) -> &UInt64Array {
+    unimplemented!("Cannot cast to uint64")
+  }
+
+  fn as_float(&self) -> &FloatArray {
+    unimplemented!("Cannot cast to float")
+  }
+
+  fn as_double(&self) -> &DoubleArray {
+    unimplemented!("Cannot cast to double")
+  }
+
+  fn as_halffloat(&self) -> &HalfFloatArray {
+    unimplemented!("Cannot cast to halffloat")
   }
 }
 
@@ -224,14 +274,6 @@ impl BaseArray for NullArray {
     true
   }
 
-  fn null_count(&self) -> i64 {
-    self.data.len()
-  }
-
-  fn null_bitmap_data(&self) -> *const u8 {
-    ptr::null()
-  }
-
   fn data(&self) -> &ArrayData {
     &self.data
   }
@@ -272,18 +314,69 @@ impl BooleanArray {
 }
 
 impl BaseArray for BooleanArray {
-  fn null_count(&self) -> i64 {
-    self.data.null_count()
-  }
-
-  fn null_bitmap_data(&self) -> *const u8 {
-    self.data.raw_null_bitmap()
-  }
-
   fn data(&self) -> &ArrayData {
     &self.data
   }
 }
+
+impl Cast for BooleanArray {
+  fn as_bool(&self) -> &BooleanArray {
+    &self
+  }
+}
+
+macro_rules! define_numeric_array {
+    ($name: ident, $cast_fn: ident) => {
+      pub struct $name {
+        data: ArrayData,
+        raw_values: *const u8
+      }
+
+      impl $name {
+        pub fn from_data(data: ArrayData) -> Self {
+          let raw_values = data.raw_values();
+          $name {
+            data,
+            raw_values
+          }
+        }
+
+        pub fn raw_values(&self) -> *const u8 {
+          self.raw_values
+        }
+
+        pub fn value(&self, i: i64) -> bool {
+          bit_util::get_bit(self.raw_values, i + self.data.offset())
+        }
+      }
+
+      impl BaseArray for $name {
+        fn data(&self) -> &ArrayData {
+          &self.data
+        }
+      }
+
+      impl Cast for $name {
+        fn $cast_fn(&self) -> &$name {
+          &self
+        }
+      }
+    };
+}
+
+define_numeric_array!(Int8Array, as_int8);
+define_numeric_array!(Int16Array, as_int16);
+define_numeric_array!(Int32Array, as_int32);
+define_numeric_array!(Int64Array, as_int64);
+define_numeric_array!(UInt8Array, as_uint8);
+define_numeric_array!(UInt16Array, as_uint16);
+define_numeric_array!(UInt32Array, as_uint32);
+define_numeric_array!(UInt64Array, as_uint64);
+define_numeric_array!(FloatArray, as_float);
+define_numeric_array!(DoubleArray, as_double);
+define_numeric_array!(HalfFloatArray, as_halffloat);
+
+
 
 
 //#[derive(Debug, Eq, PartialEq)]
