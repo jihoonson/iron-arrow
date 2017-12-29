@@ -1,12 +1,12 @@
 use common::status::{ArrowError, StatusCode};
 
+use std::cmp;
 use std::mem;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicI64, Ordering};
 use libc;
 
 pub trait MemoryPool {
-
   fn allocate(&mut self, size: i64) -> Result<*const u8, ArrowError>;
 
   fn reallocate(&mut self, old_size: i64, new_size: i64, page: *const u8) -> Result<*const u8, ArrowError>;
@@ -61,18 +61,20 @@ impl MemoryPool for DefaultMemoryPool {
         unsafe {
           let p_new_page = mem::transmute::<*const u8, *mut libc::c_void>(new_page);
           let p_old_page = mem::transmute::<*const u8, *mut libc::c_void>(page);
-          libc::memcpy(p_new_page, p_old_page, old_size as usize);
           if old_size > 0 {
+            libc::memcpy(p_new_page, p_old_page, cmp::min(new_size, old_size) as usize);
             libc::free(p_old_page);
           }
           self.bytes_allocated.fetch_add(new_size - old_size, Ordering::Relaxed);
 
-          let locked = self.lock.lock().unwrap();
-          let cur_max = self.max_memory.get_mut();
-          let cur_alloc = self.bytes_allocated.load(Ordering::Relaxed);
+          {
+            let locked = self.lock.lock().unwrap();
+            let cur_max = self.max_memory.get_mut();
+            let cur_alloc = self.bytes_allocated.load(Ordering::Relaxed);
 
-          if *cur_max < cur_alloc {
-            *cur_max = cur_alloc;
+            if *cur_max < cur_alloc {
+              *cur_max = cur_alloc;
+            }
           }
 
           Ok(new_page)
@@ -85,7 +87,7 @@ impl MemoryPool for DefaultMemoryPool {
   fn free(&mut self, page: *const u8, size: i64) {
     // TODO
     if self.bytes_allocated() < size {
-      panic!();
+      panic!("allocated bytes[{}] is less than free size[{}]", self.bytes_allocated(), size);
     } else {
       unsafe {
         libc::free(mem::transmute::<*const u8, *mut libc::c_void>(page));

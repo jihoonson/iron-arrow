@@ -3,6 +3,8 @@ use common::bit_util;
 use memory_pool::MemoryPool;
 
 use std::mem;
+use std::cell::RefCell;
+use std::sync::Arc;
 
 use libc;
 use num::Num;
@@ -27,7 +29,7 @@ pub trait ResizableBuffer<T> {
   fn reserve(&mut self, new_capacity: i64) -> Result<&mut T, ArrowError>;
 }
 
-fn resize(pool: &mut Box<MemoryPool>, page: *const u8, size: i64, capacity: i64, new_size: i64) -> Result<(*const u8, i64, i64), ArrowError> {
+fn resize(pool: &mut Arc<RefCell<MemoryPool>>, page: *const u8, size: i64, capacity: i64, new_size: i64) -> Result<(*const u8, i64, i64), ArrowError> {
   if new_size > size {
     match reserve(pool, page, capacity, new_size) {
       Ok((new_page, new_capacity)) => Ok((new_page, new_size, new_capacity)),
@@ -37,10 +39,10 @@ fn resize(pool: &mut Box<MemoryPool>, page: *const u8, size: i64, capacity: i64,
     let new_capacity = bit_util::round_up_to_multiple_of_64(new_size);
     if capacity != new_capacity {
       if new_size == 0 {
-        pool.free(page, capacity);
+        pool.borrow_mut().free(page, capacity);
         Ok((unsafe { mem::uninitialized() }, 0, 0))
       } else {
-        match pool.reallocate(capacity, new_capacity, page) {
+        match pool.borrow_mut().reallocate(capacity, new_capacity, page) {
           Ok(new_page) => {
             Ok((new_page, new_size, new_capacity))
           },
@@ -53,10 +55,10 @@ fn resize(pool: &mut Box<MemoryPool>, page: *const u8, size: i64, capacity: i64,
   }
 }
 
-fn reserve(pool: &mut Box<MemoryPool>, page: *const u8, capacity: i64, new_capacity: i64) -> Result<(*const u8, i64), ArrowError> {
+fn reserve(pool: &mut Arc<RefCell<MemoryPool>>, page: *const u8, capacity: i64, new_capacity: i64) -> Result<(*const u8, i64), ArrowError> {
   if new_capacity > capacity {
     let new_capacity = bit_util::round_up_to_multiple_of_64(new_capacity);
-    match pool.reallocate(capacity, new_capacity, page) {
+    match pool.borrow_mut().reallocate(capacity, new_capacity, page) {
       Ok(new_page) => {
         Ok((new_page, new_capacity))
       },
@@ -75,7 +77,7 @@ fn as_mut<T>(p: *const u8) -> *mut T {
 // Copy?
 
 pub struct PoolBuffer {
-  pool: Box<MemoryPool>,
+  pool: Arc<RefCell<MemoryPool>>,
   page: *const u8,
   size: i64,
   capacity: i64
@@ -83,7 +85,7 @@ pub struct PoolBuffer {
 }
 
 impl PoolBuffer {
-  pub fn new(pool: Box<MemoryPool>) -> PoolBuffer {
+  pub fn new(pool: Arc<RefCell<MemoryPool>>) -> PoolBuffer {
     PoolBuffer {
       pool,
       page: unsafe { mem::uninitialized() },
@@ -93,7 +95,7 @@ impl PoolBuffer {
     }
   }
 
-  pub fn from(pool: Box<MemoryPool>, page: *const u8, size: i64, capacity: i64) -> PoolBuffer {
+  pub fn from(pool: Arc<RefCell<MemoryPool>>, page: *const u8, size: i64, capacity: i64) -> PoolBuffer {
     PoolBuffer {
       pool,
       page,
@@ -169,7 +171,7 @@ impl ResizableBuffer<PoolBuffer> for PoolBuffer {
 impl Drop for PoolBuffer {
   fn drop(&mut self) {
     if self.capacity > 0 {
-      self.pool.free(self.page, self.capacity);
+      self.pool.borrow_mut().free(self.page, self.capacity);
     }
   }
 }
@@ -185,16 +187,16 @@ pub trait TypedBufferBuilder<T> {
 }
 
 pub struct BufferBuilder {
-  pool: Box<MemoryPool>,
+  pool: Arc<RefCell<MemoryPool>>,
   page: *const u8,
   size: i64,
   capacity: i64
 }
 
 impl BufferBuilder {
-  pub fn new(pool: Box<MemoryPool>) -> BufferBuilder {
+  pub fn new(pool: Arc<RefCell<MemoryPool>>) -> BufferBuilder {
     BufferBuilder {
-      pool: pool,
+      pool,
       page: unsafe { mem::uninitialized() },
       size: 0,
       capacity: 0
