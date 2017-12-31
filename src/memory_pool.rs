@@ -41,7 +41,7 @@ impl MemoryPool for DefaultMemoryPool {
       Ok(page) => {
         self.bytes_allocated.fetch_add(size, Ordering::Relaxed);
 
-        let locked = self.lock.lock().unwrap();
+        let _locked = self.lock.lock().unwrap();
         let cur_max = self.max_memory.get_mut();
         let cur_alloc = self.bytes_allocated.load(Ordering::Relaxed);
 
@@ -68,7 +68,7 @@ impl MemoryPool for DefaultMemoryPool {
           self.bytes_allocated.fetch_add(new_size - old_size, Ordering::Relaxed);
 
           {
-            let locked = self.lock.lock().unwrap();
+            let _locked = self.lock.lock().unwrap();
             let cur_max = self.max_memory.get_mut();
             let cur_alloc = self.bytes_allocated.load(Ordering::Relaxed);
 

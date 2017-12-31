@@ -17,28 +17,28 @@ pub struct ArrayData {
   null_count: i64,
   offset: i64,
   null_bitmap: Option<PoolBuffer>,
-  values: Option<PoolBuffer>,
-  children: Vec<ArrayData>
+  values: Option<PoolBuffer>
+//  children: Vec<ArrayData>
 }
 
 impl ArrayData {
-  pub fn new(ty: DataType, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> ArrayData {
-    ArrayData::create(ty, length, ArrayData::compute_null_count(&null_bitmap, offset, length), offset, null_bitmap, Some(values), Vec::new())
+  pub fn new(ty: DataType, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>) -> ArrayData {
+    ArrayData::create(ty, length, ArrayData::compute_null_count(&null_bitmap, offset, length), offset, null_bitmap, values)
   }
 
   pub fn null(length: i64, offset: i64) -> ArrayData {
-    unsafe { ArrayData::create(DataType::null(), length, length, offset, None, None, Vec::new()) }
+    ArrayData::create(DataType::null(), length, length, offset, None, None)
   }
 
-  fn create(ty: DataType, length: i64, null_count: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>, children: Vec<ArrayData>) -> ArrayData {
+  fn create(ty: DataType, length: i64, null_count: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>) -> ArrayData {
     ArrayData {
       ty,
       length,
       null_count,
       offset,
       null_bitmap,
-      values,
-      children
+      values
+//      children
     }
   }
 
@@ -82,20 +82,20 @@ impl ArrayData {
 //    self.values.data()
 //  }
 
-  #[inline]
-  pub fn children(&self) -> &Vec<ArrayData> {
-    &self.children
-  }
-
-  #[inline]
-  pub fn child(&self, i: usize) -> &ArrayData {
-    &self.children[i]
-  }
-
-  #[inline]
-  pub fn num_children(&self) -> i32 {
-    self.children.len() as i32
-  }
+//  #[inline]
+//  pub fn children(&self) -> &Vec<ArrayData> {
+//    &self.children
+//  }
+//
+//  #[inline]
+//  pub fn child(&self, i: usize) -> &ArrayData {
+//    &self.children[i]
+//  }
+//
+//  #[inline]
+//  pub fn num_children(&self) -> i32 {
+//    self.children.len() as i32
+//  }
 
   #[inline]
   fn compute_null_count(null_bitmap: &Option<PoolBuffer>, offset: i64, length: i64) -> i64 {
@@ -155,7 +155,10 @@ pub enum ArrayMeta {
 
   Decimal,
 
-  List,
+  List {
+    values: Box<Array>,
+    value_offsets: *const i32
+  },
   Struct,
   Union,
 
@@ -164,7 +167,11 @@ pub enum ArrayMeta {
 
 impl Array {
   pub fn primitive(ty: DataType, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
-    Array::fixed_width(ArrayData::new(ty, length, offset, null_bitmap, values))
+    Array::fixed_width(ArrayData::new(ty, length, offset, null_bitmap, Some(values)))
+  }
+
+  pub fn fixed_size_binary(byte_width: i32, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
+    Array::fixed_width(ArrayData::new(DataType::fixed_sized_binary(byte_width), length, offset, null_bitmap, Some(values)))
   }
 
   pub fn null(length: i64, offset: i64) -> Array {
@@ -189,6 +196,15 @@ impl Array {
       Ty::Float => ArrayMeta::Float,
       Ty::Double => ArrayMeta::Double,
 
+      Ty::Date64 => ArrayMeta::Date64,
+      Ty::Date32 => ArrayMeta::Date32,
+      Ty::Time64 => ArrayMeta::Time64,
+      Ty::Time32 => ArrayMeta::Time32,
+      Ty::Timestamp => ArrayMeta::Timestamp,
+      Ty::Interval => ArrayMeta::Interval,
+
+      Ty::FixedSizedBinary => ArrayMeta::FixedSizedBinary,
+
       _ => panic!("[{:?}] is not supported type", data.data_type().ty())
     };
 
@@ -199,7 +215,7 @@ impl Array {
   }
 
   pub fn variable_width(ty: DataType, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer, value_offsets: PoolBuffer) -> Array {
-    let data = ArrayData::new(ty, length, offset, null_bitmap, values);
+    let data = ArrayData::new(ty, length, offset, null_bitmap, Some(values));
     let meta = match data.data_type().ty() {
       Ty::Binary => ArrayMeta::Binary {
         value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) }
@@ -207,6 +223,18 @@ impl Array {
       _ => panic!()
     };
 
+    Array {
+      data,
+      meta
+    }
+  }
+
+  pub fn list(value_type: Box<DataType>, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Array, value_offsets: PoolBuffer) -> Array {
+    let data = ArrayData::new(DataType::list(value_type), length, offset, null_bitmap, None);
+    let meta = ArrayMeta::List {
+      values: Box::new(values),
+      value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) }
+    };
     Array {
       data,
       meta
@@ -269,11 +297,6 @@ impl Array {
   }
 
   #[inline]
-  pub fn num_fields(&self) -> i32 {
-    self.data.num_children()
-  }
-
-  #[inline]
   pub fn data(&self) -> &ArrayData {
     &self.data
   }
@@ -292,13 +315,13 @@ impl Clone for Box<Array> {
 }
 
 // TODO: maybe need cast?
-pub trait FixedWidthArray<T> {
+pub trait PrimitiveArray<T> {
   fn value(&self, i: i64) -> T;
 
   fn values(&self) -> *const T;
 }
 
-impl FixedWidthArray<bool> for Array {
+impl PrimitiveArray<bool> for Array {
   fn value(&self, i: i64) -> bool {
     match self.ty() {
       Ty::Bool => match self.value_buffer() {
@@ -325,30 +348,9 @@ impl FixedWidthArray<bool> for Array {
   }
 }
 
-impl FixedWidthArray<u16> for Array {
-  fn value(&self, i: i64) -> u16 {
-    unsafe { *self.values().offset(i as isize) }
-  }
-
-  fn values(&self) -> *const u16 {
-    match self.ty() {
-      Ty::UInt16 | Ty::HalfFloat => match self.value_buffer() {
-        &Some(ref buffer) => {
-          unsafe {
-            use std::ptr;
-            mem::transmute::<*const u8, *const u16>(buffer.data().offset(self.data.offset() as isize))
-          }
-        },
-        &None => panic!("value buffer doesn't exist")
-      },
-      _ => panic!("{:?} is not a boolean array", self.ty())
-    }
-  }
-}
-
-macro_rules! impl_fixed_width_array {
+macro_rules! impl_primitive_array {
     ($ty: path, $prim_ty: ident) => {
-      impl FixedWidthArray<$prim_ty> for Array {
+      impl PrimitiveArray<$prim_ty> for Array {
         fn value(&self, i: i64) -> $prim_ty {
           unsafe { *self.values().offset(i as isize) }
         }
@@ -369,18 +371,88 @@ macro_rules! impl_fixed_width_array {
         }
       }
     };
+
+    ($ty1: path, $ty2: path, $prim_ty: ident) => {
+      impl PrimitiveArray<$prim_ty> for Array {
+        fn value(&self, i: i64) -> $prim_ty {
+          unsafe { *self.values().offset(i as isize) }
+        }
+
+        fn values(&self) -> *const $prim_ty {
+          match self.ty() {
+            $ty1 | $ty2 => match self.value_buffer() {
+              &Some(ref buffer) => {
+                unsafe {
+                  use std::ptr;
+                  mem::transmute::<*const u8, *const $prim_ty>(buffer.data().offset(self.data.offset() as isize))
+                }
+              },
+              &None => panic!("value buffer doesn't exist")
+            },
+            _ => panic!("{:?} is not a boolean array", self.ty())
+          }
+        }
+      }
+    };
+
+    ($ty1: path, $ty2: path, $ty3: path, $prim_ty: ident) => {
+      impl PrimitiveArray<$prim_ty> for Array {
+        fn value(&self, i: i64) -> $prim_ty {
+          unsafe { *self.values().offset(i as isize) }
+        }
+
+        fn values(&self) -> *const $prim_ty {
+          match self.ty() {
+            $ty1 | $ty2 | $ty3 => match self.value_buffer() {
+              &Some(ref buffer) => {
+                unsafe {
+                  use std::ptr;
+                  mem::transmute::<*const u8, *const $prim_ty>(buffer.data().offset(self.data.offset() as isize))
+                }
+              },
+              &None => panic!("value buffer doesn't exist")
+            },
+            _ => panic!("{:?} is not a boolean array", self.ty())
+          }
+        }
+      }
+    };
+
+    ($ty1: path, $ty2: path, $ty3: path, $ty4: path, $ty5: path, $prim_ty: ident) => {
+      impl PrimitiveArray<$prim_ty> for Array {
+        fn value(&self, i: i64) -> $prim_ty {
+          unsafe { *self.values().offset(i as isize) }
+        }
+
+        fn values(&self) -> *const $prim_ty {
+          match self.ty() {
+            $ty1 | $ty2 | $ty3 | $ty4 | $ty5 => match self.value_buffer() {
+              &Some(ref buffer) => {
+                unsafe {
+                  use std::ptr;
+                  mem::transmute::<*const u8, *const $prim_ty>(buffer.data().offset(self.data.offset() as isize))
+                }
+              },
+              &None => panic!("value buffer doesn't exist")
+            },
+            _ => panic!("{:?} is not a boolean array", self.ty())
+          }
+        }
+      }
+    };
 }
 
-impl_fixed_width_array!(Ty::Int8, i8);
-impl_fixed_width_array!(Ty::Int16, i16);
-impl_fixed_width_array!(Ty::Int32, i32);
-impl_fixed_width_array!(Ty::Int64, i64);
-impl_fixed_width_array!(Ty::UInt8, u8);
-impl_fixed_width_array!(Ty::UInt32, u32);
-impl_fixed_width_array!(Ty::UInt64, u64);
+impl_primitive_array!(Ty::Int8, i8);
+impl_primitive_array!(Ty::Int16, i16);
+impl_primitive_array!(Ty::Int32, Ty::Date32, Ty::Time32, i32);
+impl_primitive_array!(Ty::Int64, Ty::Date64, Ty::Time64, Ty::Timestamp, Ty::Interval, i64);
+impl_primitive_array!(Ty::UInt8, u8);
+impl_primitive_array!(Ty::UInt16, Ty::HalfFloat, u16);
+impl_primitive_array!(Ty::UInt32, u32);
+impl_primitive_array!(Ty::UInt64, u64);
 
-impl_fixed_width_array!(Ty::Float, f32);
-impl_fixed_width_array!(Ty::Double, f64);
+impl_primitive_array!(Ty::Float, f32);
+impl_primitive_array!(Ty::Double, f64);
 
 pub struct VariableWidthElem {
   p: *const u8,
@@ -395,6 +467,18 @@ pub trait VariableWidthArray {
   fn value_len(&self, i: i64) -> i32;
 }
 
+fn value_offset(value_offsets: &*const i32, i: i64) -> i32 {
+  unsafe { *value_offsets.offset(i as isize) }
+}
+
+fn value_len(value_offsets: &*const i32, i: i64) -> i32 {
+  unsafe {
+    let i_as_isize = i as isize;
+    let pos = *value_offsets.offset(i_as_isize);
+    *value_offsets.offset(i_as_isize + 1) - pos
+  }
+}
+
 impl VariableWidthArray for Array {
   fn value(&self, i: i64) -> VariableWidthElem {
     match self.meta {
@@ -402,7 +486,7 @@ impl VariableWidthArray for Array {
         let offset = i + self.data.offset();
         unsafe {
           let pos = *value_offsets.offset(i as isize);
-          let value_len = *value_offsets.offset((i + 1) as isize) - pos;
+          let value_len = *value_offsets.offset((offset + 1) as isize) - pos;
           match self.data.values_buffer() {
             &Some(ref buffer) => VariableWidthElem {
               p: buffer.data().offset(pos as isize),
@@ -412,6 +496,9 @@ impl VariableWidthArray for Array {
           }
         }
       },
+      ArrayMeta::List { ref values, ref value_offsets } => {
+        unimplemented!()
+      }
       _ => panic!()
     }
   }
@@ -419,8 +506,10 @@ impl VariableWidthArray for Array {
   fn value_offset(&self, i: i64) -> i32 {
     match self.meta {
       ArrayMeta::Binary { ref value_offsets } | ArrayMeta::String { ref value_offsets } => {
-        let offset = i + self.data.offset();
-        unsafe { *value_offsets.offset(i as isize) }
+        value_offset(value_offsets, i)
+      },
+      ArrayMeta::List { ref values, ref value_offsets } => {
+        value_offset(value_offsets, i)
       },
       _ => panic!()
     }
@@ -429,11 +518,10 @@ impl VariableWidthArray for Array {
   fn value_len(&self, i: i64) -> i32 {
     match self.meta {
       ArrayMeta::Binary { ref value_offsets } | ArrayMeta::String { ref value_offsets } => {
-        let offset = i + self.data.offset();
-        unsafe {
-          let pos = *value_offsets.offset(i as isize);
-          *value_offsets.offset((i + 1) as isize) - pos
-        }
+        value_len(value_offsets, i)
+      },
+      ArrayMeta::List { ref values, ref value_offsets } => {
+        value_len(value_offsets, i)
       },
       _ => panic!()
     }
@@ -451,6 +539,63 @@ impl <T> StringArray for T where T: VariableWidthArray {
   }
 }
 
+pub trait FixedSizeBinaryArray {
+  fn byte_width(&self) -> i32;
+
+  fn fixed_size_value(&self, i: i64) -> *const u8;
+
+  fn fixed_size_values(&self) -> *const u8;
+}
+
+impl FixedSizeBinaryArray for Array {
+  fn byte_width(&self) -> i32 {
+    match self.data_type() {
+      &DataType::FixedSizedBinary { byte_width } => byte_width,
+      &DataType::Decimal { precision: _precision, scale: _scale } => 16,
+      _ => panic!("{:?} is not fixed sized binary type", self.data_type().ty())
+    }
+  }
+
+  fn fixed_size_value(&self, i: i64) -> *const u8 {
+    match self.value_buffer() {
+      &Some(ref buffer) => {
+        unsafe { buffer.data().offset(((i + self.data.offset()) * self.byte_width() as i64) as isize) }
+      },
+      &None => panic!()
+    }
+  }
+
+  fn fixed_size_values(&self) -> *const u8 {
+    match self.value_buffer() {
+      &Some(ref buffer) => {
+        unsafe { buffer.data().offset((self.data.offset() * self.byte_width() as i64) as isize) }
+      },
+      &None => panic!()
+    }
+  }
+}
+
+pub trait ListArray {
+  fn list_values(&self) -> &Box<Array>;
+
+  fn value_type(&self) -> &DataType;
+}
+
+impl ListArray for Array {
+  fn list_values(&self) -> &Box<Array> {
+    match self.meta {
+      ArrayMeta::List { ref values, ref value_offsets } => values,
+      _ => panic!()
+    }
+  }
+
+  fn value_type(&self) -> &DataType {
+    match self.data_type() {
+      &DataType::List { ref value_type } => value_type,
+      _ => panic!()
+    }
+  }
+}
 
 //pub trait BaseArray {
 //  fn is_null(&self, i: i64) -> bool {
@@ -507,11 +652,11 @@ pub trait Cast {
 //    unimplemented!("Cannot cast to null")
 //  }
 
-  fn as_bool(&self) -> &FixedWidthArray<bool> {
+  fn as_bool(&self) -> &PrimitiveArray<bool> {
     unimplemented!("Cannot cast to boolean")
   }
 
-  fn as_int8(&self) -> &FixedWidthArray<i8> {
+  fn as_int8(&self) -> &PrimitiveArray<i8> {
     unimplemented!("Cannot cast to int8")
   }
 
