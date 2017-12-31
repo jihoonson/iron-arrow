@@ -93,7 +93,7 @@ pub enum Ty {
 /// nested type consisting of other data types, or another data type (e.g. a
 /// timestamp encoded as an int64)
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum DataType {
+pub enum DataType { // TODO => generic trait. impl DataType<Ty> for Ty
   // A degenerate NULL type represented as 0 bytes/bits
   Null,
 
@@ -802,25 +802,6 @@ impl DataType {
     }
   }
 }
-
-
-
-//// Required to implement this trait for every data types
-//pub trait BaseDataType {
-//  fn ty(&self) -> Ty;
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc>;
-//  fn name(&self) -> &str;
-//
-//  fn box_clone(&self) -> Box<BaseDataType>;
-//
-//  fn is_integer(&self) -> bool {
-//    false
-//  }
-//
-//  fn is_float(&self) -> bool {
-//    false
-//  }
-//}
 
 //pub trait Cast {
 //  fn as_null(&self) -> &NullType {

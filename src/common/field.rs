@@ -7,7 +7,7 @@ use std::fmt::{Debug, Formatter, Error};
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Field {
   name: String,
-  data_type: DataType,
+  data_type: DataType, // TODO => Ty
   nullable: bool,
   metadata: Option<KeyValueMetadata>
 }

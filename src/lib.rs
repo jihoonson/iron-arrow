@@ -12,6 +12,7 @@ pub mod common;
 pub mod array;
 pub mod memory_pool;
 pub mod buffer;
+pub mod builder;
 
 #[cfg(test)]
 mod tests {

@@ -11,27 +11,27 @@ use std::mem;
 use std::fmt::{Debug, Formatter, Error};
 
 #[derive(Eq, PartialEq)]
-pub struct ArrayData {
+pub struct ArrayMeta {
   ty: DataType,
   length: i64,
   null_count: i64,
   offset: i64,
   null_bitmap: Option<PoolBuffer>,
-  values: Option<PoolBuffer>
+  values: Option<PoolBuffer> // TODO => Move to ArrayData
 //  children: Vec<ArrayData>
 }
 
-impl ArrayData {
-  pub fn new(ty: DataType, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>) -> ArrayData {
-    ArrayData::create(ty, length, ArrayData::compute_null_count(&null_bitmap, offset, length), offset, null_bitmap, values)
+impl ArrayMeta {
+  pub fn new(ty: DataType, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>) -> ArrayMeta {
+    ArrayMeta::create(ty, length, ArrayMeta::compute_null_count(&null_bitmap, offset, length), offset, null_bitmap, values)
   }
 
-  pub fn null(length: i64, offset: i64) -> ArrayData {
-    ArrayData::create(DataType::null(), length, length, offset, None, None)
+  pub fn null(length: i64, offset: i64) -> ArrayMeta {
+    ArrayMeta::create(DataType::null(), length, length, offset, None, None)
   }
 
-  fn create(ty: DataType, length: i64, null_count: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>) -> ArrayData {
-    ArrayData {
+  fn create(ty: DataType, length: i64, null_count: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>) -> ArrayMeta {
+    ArrayMeta {
       ty,
       length,
       null_count,
@@ -116,12 +116,12 @@ impl ArrayData {
 
 #[derive(Eq, PartialEq)]
 pub struct Array {
-  data: ArrayData,
-  meta: ArrayMeta
+  data: ArrayMeta,
+  meta: ArrayData
 }
 
 #[derive(Eq, PartialEq)]
-pub enum ArrayMeta {
+pub enum ArrayData {
   Null,
   Bool,
 
@@ -167,43 +167,43 @@ pub enum ArrayMeta {
 
 impl Array {
   pub fn primitive(ty: DataType, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
-    Array::fixed_width(ArrayData::new(ty, length, offset, null_bitmap, Some(values)))
+    Array::fixed_width(ArrayMeta::new(ty, length, offset, null_bitmap, Some(values)))
   }
 
   pub fn fixed_size_binary(byte_width: i32, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
-    Array::fixed_width(ArrayData::new(DataType::fixed_sized_binary(byte_width), length, offset, null_bitmap, Some(values)))
+    Array::fixed_width(ArrayMeta::new(DataType::fixed_sized_binary(byte_width), length, offset, null_bitmap, Some(values)))
   }
 
   pub fn null(length: i64, offset: i64) -> Array {
-    Array::fixed_width(ArrayData::null(length, offset))
+    Array::fixed_width(ArrayMeta::null(length, offset))
   }
 
-  fn fixed_width(data: ArrayData) -> Array {
+  fn fixed_width(data: ArrayMeta) -> Array {
     let meta = match data.data_type().ty() {
-      Ty::NA => ArrayMeta::Null,
-      Ty::Bool => ArrayMeta::Bool,
+      Ty::NA => ArrayData::Null,
+      Ty::Bool => ArrayData::Bool,
 
-      Ty::Int8 => ArrayMeta::Int8,
-      Ty::Int16 => ArrayMeta::Int16,
-      Ty::Int32 => ArrayMeta::Int32,
-      Ty::Int64 => ArrayMeta::Int64,
-      Ty::UInt8 => ArrayMeta::UInt8,
-      Ty::UInt16 => ArrayMeta::UInt16,
-      Ty::UInt32 => ArrayMeta::UInt32,
-      Ty::UInt64 => ArrayMeta::UInt64,
+      Ty::Int8 => ArrayData::Int8,
+      Ty::Int16 => ArrayData::Int16,
+      Ty::Int32 => ArrayData::Int32,
+      Ty::Int64 => ArrayData::Int64,
+      Ty::UInt8 => ArrayData::UInt8,
+      Ty::UInt16 => ArrayData::UInt16,
+      Ty::UInt32 => ArrayData::UInt32,
+      Ty::UInt64 => ArrayData::UInt64,
 
-      Ty::HalfFloat => ArrayMeta::HalfFloat,
-      Ty::Float => ArrayMeta::Float,
-      Ty::Double => ArrayMeta::Double,
+      Ty::HalfFloat => ArrayData::HalfFloat,
+      Ty::Float => ArrayData::Float,
+      Ty::Double => ArrayData::Double,
 
-      Ty::Date64 => ArrayMeta::Date64,
-      Ty::Date32 => ArrayMeta::Date32,
-      Ty::Time64 => ArrayMeta::Time64,
-      Ty::Time32 => ArrayMeta::Time32,
-      Ty::Timestamp => ArrayMeta::Timestamp,
-      Ty::Interval => ArrayMeta::Interval,
+      Ty::Date64 => ArrayData::Date64,
+      Ty::Date32 => ArrayData::Date32,
+      Ty::Time64 => ArrayData::Time64,
+      Ty::Time32 => ArrayData::Time32,
+      Ty::Timestamp => ArrayData::Timestamp,
+      Ty::Interval => ArrayData::Interval,
 
-      Ty::FixedSizedBinary => ArrayMeta::FixedSizedBinary,
+      Ty::FixedSizedBinary => ArrayData::FixedSizedBinary,
 
       _ => panic!("[{:?}] is not supported type", data.data_type().ty())
     };
@@ -215,9 +215,9 @@ impl Array {
   }
 
   pub fn variable_width(ty: DataType, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer, value_offsets: PoolBuffer) -> Array {
-    let data = ArrayData::new(ty, length, offset, null_bitmap, Some(values));
+    let data = ArrayMeta::new(ty, length, offset, null_bitmap, Some(values));
     let meta = match data.data_type().ty() {
-      Ty::Binary => ArrayMeta::Binary {
+      Ty::Binary => ArrayData::Binary {
         value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) }
       },
       _ => panic!()
@@ -230,8 +230,8 @@ impl Array {
   }
 
   pub fn list(value_type: Box<DataType>, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Array, value_offsets: PoolBuffer) -> Array {
-    let data = ArrayData::new(DataType::list(value_type), length, offset, null_bitmap, None);
-    let meta = ArrayMeta::List {
+    let data = ArrayMeta::new(DataType::list(value_type), length, offset, null_bitmap, None);
+    let meta = ArrayData::List {
       values: Box::new(values),
       value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) }
     };
@@ -297,7 +297,7 @@ impl Array {
   }
 
   #[inline]
-  pub fn data(&self) -> &ArrayData {
+  pub fn data(&self) -> &ArrayMeta {
     &self.data
   }
 }
@@ -482,7 +482,7 @@ fn value_len(value_offsets: &*const i32, i: i64) -> i32 {
 impl VariableWidthArray for Array {
   fn value(&self, i: i64) -> VariableWidthElem {
     match self.meta {
-      ArrayMeta::Binary { ref value_offsets } | ArrayMeta::String { ref value_offsets } => {
+      ArrayData::Binary { ref value_offsets } | ArrayData::String { ref value_offsets } => {
         let offset = i + self.data.offset();
         unsafe {
           let pos = *value_offsets.offset(i as isize);
@@ -496,7 +496,7 @@ impl VariableWidthArray for Array {
           }
         }
       },
-      ArrayMeta::List { ref values, ref value_offsets } => {
+      ArrayData::List { ref values, ref value_offsets } => {
         unimplemented!()
       }
       _ => panic!()
@@ -505,10 +505,10 @@ impl VariableWidthArray for Array {
 
   fn value_offset(&self, i: i64) -> i32 {
     match self.meta {
-      ArrayMeta::Binary { ref value_offsets } | ArrayMeta::String { ref value_offsets } => {
+      ArrayData::Binary { ref value_offsets } | ArrayData::String { ref value_offsets } => {
         value_offset(value_offsets, i)
       },
-      ArrayMeta::List { ref values, ref value_offsets } => {
+      ArrayData::List { ref values, ref value_offsets } => {
         value_offset(value_offsets, i)
       },
       _ => panic!()
@@ -517,10 +517,10 @@ impl VariableWidthArray for Array {
 
   fn value_len(&self, i: i64) -> i32 {
     match self.meta {
-      ArrayMeta::Binary { ref value_offsets } | ArrayMeta::String { ref value_offsets } => {
+      ArrayData::Binary { ref value_offsets } | ArrayData::String { ref value_offsets } => {
         value_len(value_offsets, i)
       },
-      ArrayMeta::List { ref values, ref value_offsets } => {
+      ArrayData::List { ref values, ref value_offsets } => {
         value_len(value_offsets, i)
       },
       _ => panic!()
@@ -584,7 +584,7 @@ pub trait ListArray {
 impl ListArray for Array {
   fn list_values(&self) -> &Box<Array> {
     match self.meta {
-      ArrayMeta::List { ref values, ref value_offsets } => values,
+      ArrayData::List { ref values, ref value_offsets } => values,
       _ => panic!()
     }
   }
