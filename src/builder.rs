@@ -1,7 +1,7 @@
 use common::status::ArrowError;
 use common::bit_util;
 use common::ty;
-use common::ty::{Ty, DataType};
+use common::ty::Ty;
 use memory_pool::MemoryPool;
 use buffer::{Buffer, PoolBuffer};
 

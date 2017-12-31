@@ -15,87 +15,9 @@ use std::fmt::{Debug, Formatter, Error};
 /// nested type consisting of other data types, or another data type (e.g. a
 /// timestamp encoded as an int64)
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum Ty {
+pub enum Ty { // TODO => generic trait. impl DataType<Ty> for Ty
   // A degenerate NULL type represented as 0 bytes/bits
   NA,
-
-  // A boolean value represented as 1 bit
-  Bool,
-
-  // Little-endian integer types
-  UInt8,
-  Int8,
-  UInt16,
-  Int16,
-  UInt32,
-  Int32,
-  UInt64,
-  Int64,
-
-  // 2-byte floating point value
-  HalfFloat,
-
-  // 4-byte floating point value
-  Float,
-
-  // 8-byte floating point value
-  Double,
-
-  // UTF8 variable-length string as List<Char>
-  String,
-
-  // Variable-length bytes (no guarantee of UTF8-ness)
-  Binary,
-
-  // Fixed-size binary. Each value occupies the same number of bytes
-  FixedSizedBinary,
-
-  // int64_t milliseconds since the UNIX epoch
-  Date64,
-
-  // int32_t days since the UNIX epoch
-  Date32,
-
-  // Exact timestamp encoded with int64 since UNIX epoch
-  // Default unit millisecond
-  Timestamp,
-
-  // Time as signed 32-bit integer, representing either seconds or
-  // milliseconds since midnight
-  Time32,
-
-  // Time as signed 64-bit integer, representing either microseconds or
-  // nanoseconds since midnight
-  Time64,
-
-  // YearMonth or DayTime interval in SQL style
-  Interval,
-
-  // Precision- and scale-based decimal type. Storage type depends on the
-  // parameters.
-  Decimal,
-
-  // A list of some logical data type
-  List,
-
-  // Struct of logical types
-  Struct,
-
-  // Unions of logical types
-  Union,
-
-  // Dictionary aka Category type
-  Dictionary
-}
-
-/// Data types in this library are all *logical*. They can be expressed as
-/// either a primitive physical type (bytes or bits of some fixed size), a
-/// nested type consisting of other data types, or another data type (e.g. a
-/// timestamp encoded as an int64)
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum DataType { // TODO => generic trait. impl DataType<Ty> for Ty
-  // A degenerate NULL type represented as 0 bytes/bits
-  Null,
 
   // A boolean value represented as 1 bit
   Bool,
@@ -173,7 +95,7 @@ pub enum DataType { // TODO => generic trait. impl DataType<Ty> for Ty
 
   // A list of some logical data type
   List {
-    value_type: Box<DataType>
+    value_type: Box<Ty>
   },
 
   // Struct of logical types
@@ -190,48 +112,9 @@ pub enum DataType { // TODO => generic trait. impl DataType<Ty> for Ty
 
   // Dictionary aka Category type
   Dictionary {
-    index_type: Box<DataType>,
+    index_type: Box<Ty>,
     dictionary: Box<Array>,
     ordered: bool
-  }
-}
-
-impl Ty {
-  pub fn is_integer(&self) -> bool {
-    match self {
-      &Ty::Int8 => true,
-      &Ty::Int16 => true,
-      &Ty::Int32 => true,
-      &Ty::Int64 => true,
-      &Ty::UInt8 => true,
-      &Ty::UInt16 => true,
-      &Ty::UInt32 => true,
-      &Ty::UInt64 => true,
-      _ => false
-    }
-  }
-
-  pub fn is_signed(&self) -> bool {
-    match self {
-      &Ty::UInt8 => false,
-      &Ty::UInt16 => false,
-      &Ty::UInt32 => false,
-      &Ty::UInt64 => false,
-      &Ty::Int8 => true,
-      &Ty::Int16 => true,
-      &Ty::Int32 => true,
-      &Ty::Int64 => true,
-      _ => panic!("{:?} is not an integer", self)
-    }
-  }
-
-  pub fn is_float(&self) -> bool {
-    match self {
-      &Ty::HalfFloat => true,
-      &Ty::Float => true,
-      &Ty::Double => true,
-      _ => false
-    }
   }
 }
 
@@ -294,511 +177,479 @@ impl BufferDesc {
   }
 }
 
-impl DataType {
-  pub fn null() -> DataType {
-    DataType::Null
+impl Ty {
+  pub fn null() -> Ty {
+    Ty::NA
   }
 
-  pub fn bool() -> DataType {
-    DataType::Bool
+  pub fn bool() -> Ty {
+    Ty::Bool
   }
 
-  pub fn uint8() -> DataType {
-    DataType::UInt8
+  pub fn uint8() -> Ty {
+    Ty::UInt8
   }
 
-  pub fn int8() -> DataType {
-    DataType::Int8
+  pub fn int8() -> Ty {
+    Ty::Int8
   }
 
-  pub fn uint16() -> DataType {
-    DataType::UInt16
+  pub fn uint16() -> Ty {
+    Ty::UInt16
   }
 
-  pub fn int16() -> DataType {
-    DataType::Int16
+  pub fn int16() -> Ty {
+    Ty::Int16
   }
 
-  pub fn uint32() -> DataType {
-    DataType::UInt32
+  pub fn uint32() -> Ty {
+    Ty::UInt32
   }
 
-  pub fn int32() -> DataType {
-    DataType::Int32
+  pub fn int32() -> Ty {
+    Ty::Int32
   }
 
-  pub fn uint64() -> DataType {
-    DataType::UInt64
+  pub fn uint64() -> Ty {
+    Ty::UInt64
   }
 
-  pub fn int64() -> DataType {
-    DataType::Int64
+  pub fn int64() -> Ty {
+    Ty::Int64
   }
 
-  pub fn halffloat() -> DataType {
-    DataType::HalfFloat
+  pub fn halffloat() -> Ty {
+    Ty::HalfFloat
   }
 
-  pub fn float() -> DataType {
-    DataType::Float
+  pub fn float() -> Ty {
+    Ty::Float
   }
 
-  pub fn double() -> DataType {
-    DataType::Double
+  pub fn double() -> Ty {
+    Ty::Double
   }
 
-  pub fn string() -> DataType {
-    DataType::String
+  pub fn string() -> Ty {
+    Ty::String
   }
 
-  pub fn binary() -> DataType {
-    DataType::Binary
+  pub fn binary() -> Ty {
+    Ty::Binary
   }
 
-  pub fn fixed_sized_binary(byte_width: i32) -> DataType {
-    DataType::FixedSizedBinary {
+  pub fn fixed_sized_binary(byte_width: i32) -> Ty {
+    Ty::FixedSizedBinary {
       byte_width
     }
   }
 
-  pub fn date64() -> DataType {
-    DataType::Date64 {
+  pub fn date64() -> Ty {
+    Ty::Date64 {
       unit: DateUnit::Milli
     }
   }
 
-  pub fn date64_with_unit(unit: DateUnit) -> DataType {
-    DataType::Date64 {
+  pub fn date64_with_unit(unit: DateUnit) -> Ty {
+    Ty::Date64 {
       unit
     }
   }
 
-  pub fn date32() -> DataType {
-    DataType::Date32 {
+  pub fn date32() -> Ty {
+    Ty::Date32 {
       unit: DateUnit::Milli
     }
   }
 
-  pub fn date32_with_unit(unit: DateUnit) -> DataType {
-    DataType::Date32 {
+  pub fn date32_with_unit(unit: DateUnit) -> Ty {
+    Ty::Date32 {
       unit
     }
   }
 
-  pub fn timestamp() -> DataType {
-    DataType::Timestamp {
+  pub fn timestamp() -> Ty {
+    Ty::Timestamp {
       unit: TimeUnit::Milli,
       timezone: String::new(),
     }
   }
 
-  pub fn timestamp_with_unit(unit: TimeUnit) -> DataType {
-    DataType::Timestamp {
+  pub fn timestamp_with_unit(unit: TimeUnit) -> Ty {
+    Ty::Timestamp {
       unit,
       timezone: String::new()
     }
   }
 
-  pub fn timestamp_with_timezone(timezone: String) -> DataType {
-    DataType::Timestamp {
+  pub fn timestamp_with_timezone(timezone: String) -> Ty {
+    Ty::Timestamp {
       unit: TimeUnit::Milli,
       timezone
     }
   }
 
-  pub fn timestamp_with_unit_and_timestamp(unit: TimeUnit, timezone: String) -> DataType {
-    DataType::Timestamp {
+  pub fn timestamp_with_unit_and_timestamp(unit: TimeUnit, timezone: String) -> Ty {
+    Ty::Timestamp {
       unit,
       timezone
     }
   }
 
-  pub fn time32() -> DataType {
-    DataType::Time32 {
+  pub fn time32() -> Ty {
+    Ty::Time32 {
       unit: TimeUnit::Milli
     }
   }
 
-  pub fn time32_with_unit(unit: TimeUnit) -> DataType {
-    DataType::Time32 {
+  pub fn time32_with_unit(unit: TimeUnit) -> Ty {
+    Ty::Time32 {
       unit
     }
   }
 
-  pub fn time64() -> DataType {
-    DataType::Time64 {
+  pub fn time64() -> Ty {
+    Ty::Time64 {
       unit: TimeUnit::Milli
     }
   }
 
-  pub fn time64_with_unit(unit: TimeUnit) -> DataType {
-    DataType::Time64 {
+  pub fn time64_with_unit(unit: TimeUnit) -> Ty {
+    Ty::Time64 {
       unit
     }
   }
 
-  pub fn interval() -> DataType {
-    DataType::Interval {
+  pub fn interval() -> Ty {
+    Ty::Interval {
       unit: IntervalUnit::YearMonth
     }
   }
 
-  pub fn interval_with_unit(unit: IntervalUnit) -> DataType {
-    DataType::Interval {
+  pub fn interval_with_unit(unit: IntervalUnit) -> Ty {
+    Ty::Interval {
       unit
     }
   }
 
-  pub fn decimal(precision: i32, scale: i32) -> DataType {
-    DataType::Decimal {
+  pub fn decimal(precision: i32, scale: i32) -> Ty {
+    Ty::Decimal {
       precision,
       scale
     }
   }
 
-  pub fn list(value_type: Box<DataType>) -> DataType {
-    DataType::List {
+  pub fn list(value_type: Box<Ty>) -> Ty {
+    Ty::List {
       value_type
     }
   }
 
-  pub fn struct_type(fields: Vec<Field>) -> DataType {
-    DataType::Struct {
+  pub fn struct_type(fields: Vec<Field>) -> Ty {
+    Ty::Struct {
       fields
     }
   }
 
-  pub fn union(fields: Vec<Field>, type_codes: Vec<u8>) -> DataType {
-    DataType::Union {
+  pub fn union(fields: Vec<Field>, type_codes: Vec<u8>) -> Ty {
+    Ty::Union {
       fields,
       type_codes,
       mode: UnionMode::SPARSE
     }
   }
 
-  pub fn union_with_mode(fields: Vec<Field>, type_codes: Vec<u8>, mode: UnionMode) -> DataType {
-    DataType::Union {
+  pub fn union_with_mode(fields: Vec<Field>, type_codes: Vec<u8>, mode: UnionMode) -> Ty {
+    Ty::Union {
       fields,
       type_codes,
       mode
     }
   }
 
-  pub fn dictionary(index_type: Box<DataType>, dictionary: Box<Array>) -> DataType {
+  pub fn dictionary(index_type: Box<Ty>, dictionary: Box<Array>) -> Ty {
     if !index_type.is_integer() {
-      panic!("index type [{:?}] is not an integer", index_type.ty())
+      panic!("index type [{:?}] is not an integer", index_type)
     }
 
-    DataType::Dictionary {
+    Ty::Dictionary {
       index_type,
       dictionary,
       ordered: false
     }
   }
 
-  pub fn ordered_dictionary(index_type: Box<DataType>, dictionary: Box<Array>) -> DataType {
+  pub fn ordered_dictionary(index_type: Box<Ty>, dictionary: Box<Array>) -> Ty {
     if !index_type.is_integer() {
-      panic!("index type [{:?}] is not an integer", index_type.ty())
+      panic!("index type [{:?}] is not an integer", index_type)
     }
 
-    DataType::Dictionary {
+    Ty::Dictionary {
       index_type,
       dictionary,
       ordered: true
     }
   }
 
-  pub fn ty(&self) -> Ty {
-    match self {
-      &DataType::Null => Ty::NA,
-      &DataType::Bool => Ty::Bool,
-      &DataType::UInt8 => Ty::UInt8,
-      &DataType::Int8 => Ty::Int8,
-      &DataType::UInt16 => Ty::UInt16,
-      &DataType::Int16 => Ty::Int16,
-      &DataType::UInt32 => Ty::UInt32,
-      &DataType::Int32 => Ty::Int32,
-      &DataType::UInt64 => Ty::UInt64,
-      &DataType::Int64 => Ty::Int64,
-      &DataType::HalfFloat => Ty::HalfFloat,
-      &DataType::Float => Ty::Float,
-      &DataType::Double => Ty::Double,
-      &DataType::String => Ty::String,
-      &DataType::Binary => Ty::Binary,
-      &DataType::FixedSizedBinary { byte_width } => Ty::FixedSizedBinary,
-      &DataType::Date32 { ref unit } => Ty::Date32,
-      &DataType::Date64 { ref unit } => Ty::Date64,
-      &DataType::Timestamp  { ref unit, ref timezone } => Ty::Timestamp,
-      &DataType::Time32 { ref unit } => Ty::Time32,
-      &DataType::Time64 { ref unit } => Ty::Time64,
-      &DataType::Interval { ref unit } => Ty::Interval,
-      &DataType::Decimal { precision, scale } => Ty::Decimal,
-      &DataType::List { ref value_type } => Ty::List,
-      &DataType::Struct { ref fields } => Ty::Struct,
-      &DataType::Union { ref fields, ref type_codes, ref mode } => Ty::Union,
-      &DataType::Dictionary { ref index_type, ref dictionary, ordered } => Ty::Dictionary,
-    }
-  }
-
   pub fn bit_width(&self) -> i32 {
     match self {
-      &DataType::Bool => 1,
+      &Ty::Bool => 1,
 
-      &DataType::UInt8 => 8,
-      &DataType::Int8 => 8,
-      &DataType::UInt16 => 16,
-      &DataType::Int16 => 16,
-      &DataType::UInt32 => 32,
-      &DataType::Int32 => 32,
-      &DataType::UInt64 => 64,
-      &DataType::Int64 => 64,
+      &Ty::UInt8 => 8,
+      &Ty::Int8 => 8,
+      &Ty::UInt16 => 16,
+      &Ty::Int16 => 16,
+      &Ty::UInt32 => 32,
+      &Ty::Int32 => 32,
+      &Ty::UInt64 => 64,
+      &Ty::Int64 => 64,
 
-      &DataType::HalfFloat => 16,
-      &DataType::Float => 32,
-      &DataType::Double => 64,
+      &Ty::HalfFloat => 16,
+      &Ty::Float => 32,
+      &Ty::Double => 64,
 
-      &DataType::FixedSizedBinary { byte_width } => byte_width * 8,
+      &Ty::FixedSizedBinary { byte_width } => byte_width * 8,
 
-      &DataType::Date32 { ref unit } => 32,
-      &DataType::Date64 { ref unit } => 64,
+      &Ty::Date32 { ref unit } => 32,
+      &Ty::Date64 { ref unit } => 64,
 
-      &DataType::Timestamp { ref unit, ref timezone } => 64,
-      &DataType::Time32 { ref unit } => 32,
-      &DataType::Time64 { ref unit } => 64,
-      &DataType::Interval { ref unit } => 64,
+      &Ty::Timestamp { ref unit, ref timezone } => 64,
+      &Ty::Time32 { ref unit } => 32,
+      &Ty::Time64 { ref unit } => 64,
+      &Ty::Interval { ref unit } => 64,
 
-      &DataType::Decimal { precision, scale } => 16 * 8,
+      &Ty::Decimal { precision, scale } => 16 * 8,
 
-      &DataType::Dictionary { ref index_type, ref dictionary, ordered } => index_type.bit_width(),
+      &Ty::Dictionary { ref index_type, ref dictionary, ordered } => index_type.bit_width(),
 
-      _ => panic!("{:?} is not fixed width type", self.ty())
+      _ => panic!("{:?} is not fixed width type", self)
     }
   }
 
   pub fn get_buffer_layout(&self) -> Vec<BufferDesc> {
     match self {
-      &DataType::Null => Vec::new(),
-      &DataType::Bool => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 1)],
+      &Ty::NA => Vec::new(),
+      &Ty::Bool => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 1)],
 
-      &DataType::UInt8 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 8)],
-      &DataType::Int8 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 8)],
-      &DataType::UInt16 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
-      &DataType::Int16 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
-      &DataType::UInt32 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &DataType::Int32 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &DataType::UInt64 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
-      &DataType::Int64 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::UInt8 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 8)],
+      &Ty::Int8 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 8)],
+      &Ty::UInt16 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
+      &Ty::Int16 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
+      &Ty::UInt32 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::Int32 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::UInt64 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Int64 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
 
-      &DataType::HalfFloat => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
-      &DataType::Float => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &DataType::Double => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::HalfFloat => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
+      &Ty::Float => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::Double => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
 
-      &DataType::String => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::new(BufferType::Data, 8)],
-      &DataType::Binary => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::new(BufferType::Data, 8)],
+      &Ty::String => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::new(BufferType::Data, 8)],
+      &Ty::Binary => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::new(BufferType::Data, 8)],
 
-      &DataType::FixedSizedBinary { byte_width } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, byte_width * 8)],
+      &Ty::FixedSizedBinary { byte_width } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, byte_width * 8)],
 
-      &DataType::Date32 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &DataType::Date64 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Date32 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::Date64 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
 
-      &DataType::Timestamp { ref unit, ref timezone } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
-      &DataType::Time32 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &DataType::Time64 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
-      &DataType::Interval { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Timestamp { ref unit, ref timezone } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Time32 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::Time64 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Interval { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
 
-      &DataType::Decimal { precision, scale } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16 * 8)],
+      &Ty::Decimal { precision, scale } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16 * 8)],
 
-      &DataType::List { ref value_type } => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer()],
-      &DataType::Struct { ref fields } => vec![BufferDesc::k_validity_buffer()],
-      &DataType::Union { ref fields, ref type_codes, ref mode } => {
+      &Ty::List { ref value_type } => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer()],
+      &Ty::Struct { ref fields } => vec![BufferDesc::k_validity_buffer()],
+      &Ty::Union { ref fields, ref type_codes, ref mode } => {
         match mode {
           &UnionMode::SPARSE => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer()],
           _ => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer(), BufferDesc::k_offset_buffer()]
         }
       },
-      &DataType::Dictionary { ref index_type, ref dictionary, ordered } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
+      &Ty::Dictionary { ref index_type, ref dictionary, ordered } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
     }
   }
 
   pub fn name(&self) -> &str {
     match self {
-      &DataType::Null => "null",
-      &DataType::Bool => "bool",
-      &DataType::UInt8 => "uint8",
-      &DataType::Int8 => "int8",
-      &DataType::UInt16 => "uint16",
-      &DataType::Int16 => "int16",
-      &DataType::UInt32 => "uint32",
-      &DataType::Int32 => "int32",
-      &DataType::UInt64 => "uint64",
-      &DataType::Int64 => "int64",
-      &DataType::HalfFloat => "halffloat",
-      &DataType::Float => "float",
-      &DataType::Double => "double",
-      &DataType::String => "utf8",
-      &DataType::Binary => "binary",
-      &DataType::FixedSizedBinary { byte_width } => "fixed_size_binary",
-      &DataType::Date32 { ref unit } => "date32",
-      &DataType::Date64 { ref unit } => "date64",
-      &DataType::Timestamp { ref unit, ref timezone } => "timestamp",
-      &DataType::Time32 { ref unit } => "time32",
-      &DataType::Time64 { ref unit } => "time64",
-      &DataType::Interval { ref unit } => "interval",
-      &DataType::Decimal { precision, scale } => "decimal",
-      &DataType::List { ref value_type } => "list",
-      &DataType::Struct { ref fields } => "struct",
-      &DataType::Union { ref fields, ref type_codes, ref mode } => "union",
-      &DataType::Dictionary { ref index_type, ref dictionary, ordered } => "dictionary",
+      &Ty::NA => "null",
+      &Ty::Bool => "bool",
+      &Ty::UInt8 => "uint8",
+      &Ty::Int8 => "int8",
+      &Ty::UInt16 => "uint16",
+      &Ty::Int16 => "int16",
+      &Ty::UInt32 => "uint32",
+      &Ty::Int32 => "int32",
+      &Ty::UInt64 => "uint64",
+      &Ty::Int64 => "int64",
+      &Ty::HalfFloat => "halffloat",
+      &Ty::Float => "float",
+      &Ty::Double => "double",
+      &Ty::String => "utf8",
+      &Ty::Binary => "binary",
+      &Ty::FixedSizedBinary { byte_width } => "fixed_size_binary",
+      &Ty::Date32 { ref unit } => "date32",
+      &Ty::Date64 { ref unit } => "date64",
+      &Ty::Timestamp { ref unit, ref timezone } => "timestamp",
+      &Ty::Time32 { ref unit } => "time32",
+      &Ty::Time64 { ref unit } => "time64",
+      &Ty::Interval { ref unit } => "interval",
+      &Ty::Decimal { precision, scale } => "decimal",
+      &Ty::List { ref value_type } => "list",
+      &Ty::Struct { ref fields } => "struct",
+      &Ty::Union { ref fields, ref type_codes, ref mode } => "union",
+      &Ty::Dictionary { ref index_type, ref dictionary, ordered } => "dictionary",
     }
   }
 
   pub fn is_integer(&self) -> bool {
     match self {
-      &DataType::Int8 => true,
-      &DataType::Int16 => true,
-      &DataType::Int32 => true,
-      &DataType::Int64 => true,
-      &DataType::UInt8 => true,
-      &DataType::UInt16 => true,
-      &DataType::UInt32 => true,
-      &DataType::UInt64 => true,
+      &Ty::Int8 => true,
+      &Ty::Int16 => true,
+      &Ty::Int32 => true,
+      &Ty::Int64 => true,
+      &Ty::UInt8 => true,
+      &Ty::UInt16 => true,
+      &Ty::UInt32 => true,
+      &Ty::UInt64 => true,
       _ => false
     }
   }
 
   pub fn is_signed(&self) -> bool {
     match self {
-      &DataType::UInt8 => false,
-      &DataType::UInt16 => false,
-      &DataType::UInt32 => false,
-      &DataType::UInt64 => false,
-      &DataType::Int8 => true,
-      &DataType::Int16 => true,
-      &DataType::Int32 => true,
-      &DataType::Int64 => true,
-      _ => panic!("{:?} is not an integer", self.ty())
+      &Ty::UInt8 => false,
+      &Ty::UInt16 => false,
+      &Ty::UInt32 => false,
+      &Ty::UInt64 => false,
+      &Ty::Int8 => true,
+      &Ty::Int16 => true,
+      &Ty::Int32 => true,
+      &Ty::Int64 => true,
+      _ => panic!("{:?} is not an integer", self)
     }
   }
 
   pub fn is_float(&self) -> bool {
     match self {
-      &DataType::HalfFloat => true,
-      &DataType::Float => true,
-      &DataType::Double => true,
+      &Ty::HalfFloat => true,
+      &Ty::Float => true,
+      &Ty::Double => true,
       _ => false
     }
   }
 
   pub fn precision(&self) -> Precision {
     match self {
-      &DataType::HalfFloat => Precision::Half,
-      &DataType::Float => Precision::Single,
-      &DataType::Double => Precision::Double,
-      _ => panic!("{:?} is not a floating point type", self.ty())
+      &Ty::HalfFloat => Precision::Half,
+      &Ty::Float => Precision::Single,
+      &Ty::Double => Precision::Double,
+      _ => panic!("{:?} is not a floating point type", self)
     }
   }
 
   pub fn child(&self, i: usize) -> &Field {
     match self {
-      &DataType::Struct { ref fields } => &fields[i],
-      &DataType::Union { ref fields, ref type_codes, ref mode } => &fields[i],
-      _ => panic!("{:?} is not a nested type", self.ty())
+      &Ty::Struct { ref fields } => &fields[i],
+      &Ty::Union { ref fields, ref type_codes, ref mode } => &fields[i],
+      _ => panic!("{:?} is not a nested type", self)
     }
   }
 
   pub fn get_children(&self) -> &Vec<Field> {
     match self {
-      &DataType::Struct { ref fields } => &fields,
-      &DataType::Union { ref fields, ref type_codes, ref mode } => &fields,
-      _ => panic!("{:?} is not a nested type", self.ty())
+      &Ty::Struct { ref fields } => &fields,
+      &Ty::Union { ref fields, ref type_codes, ref mode } => &fields,
+      _ => panic!("{:?} is not a nested type", self)
     }
   }
 
   pub fn num_children(&self) -> i32 {
     match self {
-      &DataType::Struct { ref fields } => fields.len() as i32,
-      &DataType::Union { ref fields, ref type_codes, ref mode } => fields.len() as i32,
-      _ => panic!("{:?} is not a nested type", self.ty())
+      &Ty::Struct { ref fields } => fields.len() as i32,
+      &Ty::Union { ref fields, ref type_codes, ref mode } => fields.len() as i32,
+      _ => panic!("{:?} is not a nested type", self)
     }
   }
 
   pub fn date_unit(&self) -> &DateUnit {
     match self {
-      &DataType::Date32 { ref unit } => unit,
-      &DataType::Date64 { ref unit } => unit,
-      _ => panic!("{:?} is not a date type", self.ty())
+      &Ty::Date32 { ref unit } => unit,
+      &Ty::Date64 { ref unit } => unit,
+      _ => panic!("{:?} is not a date type", self)
     }
   }
 
   pub fn time_unit(&self) -> &TimeUnit {
     match self {
-      &DataType::Timestamp { ref unit, ref timezone } => unit,
-      &DataType::Time32 { ref unit } => unit,
-      &DataType::Time64 { ref unit } => unit,
-      _ => panic!("{:?} is not a time type", self.ty())
+      &Ty::Timestamp { ref unit, ref timezone } => unit,
+      &Ty::Time32 { ref unit } => unit,
+      &Ty::Time64 { ref unit } => unit,
+      _ => panic!("{:?} is not a time type", self)
     }
   }
 
   pub fn interval_unit(&self) -> &IntervalUnit {
     match self {
-      &DataType::Interval { ref unit } => unit,
-      _ => panic!("{:?} is not an interval type", self.ty())
+      &Ty::Interval { ref unit } => unit,
+      _ => panic!("{:?} is not an interval type", self)
     }
   }
 
   pub fn decimal_precision(&self) -> i32 {
     match self {
-      &DataType::Decimal { precision, scale } => precision,
-      _ => panic!("{:?} is not a decimal type", self.ty())
+      &Ty::Decimal { precision, scale } => precision,
+      _ => panic!("{:?} is not a decimal type", self)
     }
   }
 
   pub fn decimal_scale(&self) -> i32 {
     match self {
-      &DataType::Decimal { precision, scale } => scale,
-      _ => panic!("{:?} is not a decimal type", self.ty())
+      &Ty::Decimal { precision, scale } => scale,
+      _ => panic!("{:?} is not a decimal type", self)
     }
   }
 
-  pub fn list_value_type(&self) -> &Box<DataType> {
+  pub fn list_value_type(&self) -> &Box<Ty> {
     match self {
-      &DataType::List { ref value_type } => &value_type,
-      _ => panic!("{:?} is not a list type", self.ty())
+      &Ty::List { ref value_type } => &value_type,
+      _ => panic!("{:?} is not a list type", self)
     }
   }
 
   pub fn union_type_codes(&self) -> &Vec<u8> {
     match self {
-      &DataType::Union { ref fields, ref type_codes, ref mode } => type_codes,
-      _ => panic!("{:?} is not an union type", self.ty())
+      &Ty::Union { ref fields, ref type_codes, ref mode } => type_codes,
+      _ => panic!("{:?} is not an union type", self)
     }
   }
 
   pub fn union_mode(&self) -> &UnionMode {
     match self {
-      &DataType::Union { ref fields, ref type_codes, ref mode } => mode,
-      _ => panic!("{:?} is not an union type", self.ty())
+      &Ty::Union { ref fields, ref type_codes, ref mode } => mode,
+      _ => panic!("{:?} is not an union type", self)
     }
   }
 
-  pub fn dictionary_index_type(&self) -> &Box<DataType> {
+  pub fn dictionary_index_type(&self) -> &Box<Ty> {
     match self {
-      &DataType::Dictionary { ref index_type, ref dictionary, ordered } => &index_type,
-      _ => panic!("{:?} is not a dictionary type", self.ty())
+      &Ty::Dictionary { ref index_type, ref dictionary, ordered } => &index_type,
+      _ => panic!("{:?} is not a dictionary type", self)
     }
   }
 
   pub fn get_dictionary(&self) -> &Box<Array> {
     match self {
-      &DataType::Dictionary { ref index_type, ref dictionary, ordered } => &dictionary,
-      _ => panic!("{:?} is not a dictionary type", self.ty())
+      &Ty::Dictionary { ref index_type, ref dictionary, ordered } => &dictionary,
+      _ => panic!("{:?} is not a dictionary type", self)
     }
   }
 
   pub fn is_dictionary_ordered(&self) -> bool {
     match self {
-      &DataType::Dictionary { ref index_type, ref dictionary, ordered } => ordered,
-      _ => panic!("{:?} is not a dictionary type", self.ty())
+      &Ty::Dictionary { ref index_type, ref dictionary, ordered } => ordered,
+      _ => panic!("{:?} is not a dictionary type", self)
     }
   }
 }

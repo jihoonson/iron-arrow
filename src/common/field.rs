@@ -7,13 +7,13 @@ use std::fmt::{Debug, Formatter, Error};
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Field {
   name: String,
-  data_type: DataType, // TODO => Ty
+  data_type: Ty, // TODO => Ty
   nullable: bool,
   metadata: Option<KeyValueMetadata>
 }
 
 impl Field {
-  pub fn new(name: String, data_type: DataType) -> Field {
+  pub fn new(name: String, data_type: Ty) -> Field {
     Field {
       name,
       data_type,
@@ -22,7 +22,7 @@ impl Field {
     }
   }
 
-  pub fn non_null(name: String, data_type: DataType) -> Field {
+  pub fn non_null(name: String, data_type: Ty) -> Field {
     Field {
       name,
       data_type,
@@ -31,7 +31,7 @@ impl Field {
     }
   }
 
-  pub fn new_with_metadata(name: String, data_type: DataType, metadata: KeyValueMetadata) -> Field {
+  pub fn new_with_metadata(name: String, data_type: Ty, metadata: KeyValueMetadata) -> Field {
     Field {
       name,
       data_type,
@@ -40,7 +40,7 @@ impl Field {
     }
   }
 
-  pub fn non_null_with_metadata(name: String, data_type: DataType, metadata: KeyValueMetadata) -> Field {
+  pub fn non_null_with_metadata(name: String, data_type: Ty, metadata: KeyValueMetadata) -> Field {
     Field {
       name,
       data_type,
@@ -55,7 +55,7 @@ impl Field {
   }
 
   #[inline]
-  pub fn data_type(&self) -> &DataType {
+  pub fn data_type(&self) -> &Ty {
     &self.data_type
   }
 
