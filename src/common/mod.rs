@@ -159,7 +159,7 @@ mod tests {
     assert_eq!(Ty::Bool, ty);
     assert_eq!("bool", ty.name());
     assert_eq!(
-      vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 1)],
+      vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 1)],
       ty.get_buffer_layout()
     );
   }
@@ -177,18 +177,18 @@ mod tests {
     );
   }
 
-  test_primitive_types!(test_uint8_fixed_width, uint8, "uint8", Ty::UInt8, 8, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(8)]);
-  test_primitive_types!(test_uint16_fixed_width, uint16, "uint16", Ty::UInt16, 16, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(16)]);
-  test_primitive_types!(test_uint32_fixed_width, uint32, "uint32", Ty::UInt32, 32, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(32)]);
-  test_primitive_types!(test_uint64_fixed_width, uint64, "uint64", Ty::UInt64, 64, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(64)]);
-  test_primitive_types!(test_int8_fixed_width, int8, "int8", Ty::Int8, 8, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(8)]);
-  test_primitive_types!(test_int16_fixed_width, int16, "int16", Ty::Int16, 16, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(16)]);
-  test_primitive_types!(test_int32_fixed_width, int32, "int32", Ty::Int32, 32, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(32)]);
-  test_primitive_types!(test_int64_fixed_width, int64, "int64", Ty::Int64, 64, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(64)]);
+  test_primitive_types!(test_uint8_fixed_width, uint8, "uint8", Ty::UInt8, 8, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(8)]);
+  test_primitive_types!(test_uint16_fixed_width, uint16, "uint16", Ty::UInt16, 16, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(16)]);
+  test_primitive_types!(test_uint32_fixed_width, uint32, "uint32", Ty::UInt32, 32, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(32)]);
+  test_primitive_types!(test_uint64_fixed_width, uint64, "uint64", Ty::UInt64, 64, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(64)]);
+  test_primitive_types!(test_int8_fixed_width, int8, "int8", Ty::Int8, 8, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(8)]);
+  test_primitive_types!(test_int16_fixed_width, int16, "int16", Ty::Int16, 16, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(16)]);
+  test_primitive_types!(test_int32_fixed_width, int32, "int32", Ty::Int32, 32, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(32)]);
+  test_primitive_types!(test_int64_fixed_width, int64, "int64", Ty::Int64, 64, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(64)]);
 
-  test_primitive_types!(test_half_float_fixed_width, halffloat, "halffloat", Ty::HalfFloat, 16, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(16)]);
-  test_primitive_types!(test_float_fixed_width, float, "float", Ty::Float, 32, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(32)]);
-  test_primitive_types!(test_double_fixed_width, double, "double", Ty::Double, 64, vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(64)]);
+  test_primitive_types!(test_half_float_fixed_width, halffloat, "halffloat", Ty::HalfFloat, 16, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(16)]);
+  test_primitive_types!(test_float_fixed_width, float, "float", Ty::Float, 32, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(32)]);
+  test_primitive_types!(test_double_fixed_width, double, "double", Ty::Double, 64, vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(64)]);
 
   #[test]
   fn test_integers_signed() {
@@ -216,7 +216,7 @@ mod tests {
     assert_eq!(Ty::Timestamp { unit: TimeUnit::Milli, timezone: String::new() }, ty);
     assert_eq!("timestamp", ty.name());
     assert_eq!(64, ty.bit_width());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(64)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(64)], ty.get_buffer_layout());
     assert_eq!(&TimeUnit::Milli, ty.time_unit());
   }
 
@@ -226,14 +226,14 @@ mod tests {
     assert_eq!(Ty::Time64 { unit: TimeUnit::Milli }, ty);
     assert_eq!("time64", ty.name());
     assert_eq!(64, ty.bit_width());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(64)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(64)], ty.get_buffer_layout());
     assert_eq!(&TimeUnit::Milli, ty.time_unit());
 
     let ty = Ty::time32();
     assert_eq!(Ty::Time32 { unit: TimeUnit::Milli }, ty);
     assert_eq!("time32", ty.name());
     assert_eq!(32, ty.bit_width());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(32)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(32)], ty.get_buffer_layout());
     assert_eq!(&TimeUnit::Milli, ty.time_unit());
   }
 
@@ -243,7 +243,7 @@ mod tests {
     assert_eq!(Ty::Interval { unit: IntervalUnit::YearMonth }, ty);
     assert_eq!("interval", ty.name());
     assert_eq!(64, ty.bit_width());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(64)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(64)], ty.get_buffer_layout());
     assert_eq!(&IntervalUnit::YearMonth, ty.interval_unit());
   }
 
@@ -253,14 +253,14 @@ mod tests {
     assert_eq!(Ty::Date32 { unit: DateUnit::Milli }, ty);
     assert_eq!("date32", ty.name());
     assert_eq!(32, ty.bit_width());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(32)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(32)], ty.get_buffer_layout());
     assert_eq!(&DateUnit::Milli, ty.date_unit());
 
     let ty = Ty::date64_with_unit(DateUnit::Day);
     assert_eq!(Ty::Date64 { unit: DateUnit::Day }, ty);
     assert_eq!("date64", ty.name());
     assert_eq!(64, ty.bit_width());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(64)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(64)], ty.get_buffer_layout());
     assert_eq!(&DateUnit::Day, ty.date_unit());
   }
 
@@ -269,7 +269,7 @@ mod tests {
     let ty = Ty::binary();
     assert_eq!(Ty::Binary, ty);
     assert_eq!("binary", ty.name());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::k_data_buffer(8)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::offset_buffer(), BufferDesc::data_buffer(8)], ty.get_buffer_layout());
   }
 
   #[test]
@@ -277,7 +277,7 @@ mod tests {
     let ty = Ty::string();
     assert_eq!(Ty::String, ty);
     assert_eq!("utf8", ty.name());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::k_data_buffer(8)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::offset_buffer(), BufferDesc::data_buffer(8)], ty.get_buffer_layout());
   }
 
   #[test]
@@ -285,7 +285,7 @@ mod tests {
     let ty = Ty::decimal(5, 2);
     assert_eq!(Ty::Decimal { precision: 5, scale: 2 }, ty);
     assert_eq!("decimal", ty.name());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_data_buffer(128)], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::data_buffer(128)], ty.get_buffer_layout());
     assert_eq!(5, ty.decimal_precision());
     assert_eq!(2, ty.decimal_scale());
   }
@@ -297,7 +297,7 @@ mod tests {
 
     assert_eq!(Ty::List { value_type: Box::new(Ty::timestamp()) }, ty);
     assert_eq!("list", ty.name());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer()], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::offset_buffer()], ty.get_buffer_layout());
     assert_eq!(&Box::new(Ty::timestamp()), ty.list_value_type());
 
     let timestamp_ty = ty.list_value_type();
@@ -315,7 +315,7 @@ mod tests {
     );
     assert_eq!(Ty::Struct { fields: fields.clone() }, ty);
     assert_eq!("struct", ty.name());
-    assert_eq!(vec![BufferDesc::k_validity_buffer()], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer()], ty.get_buffer_layout());
     assert_eq!(2, ty.num_children());
     assert_eq!(&Field::new(String::from("f1"), Ty::date32_with_unit(DateUnit::Day)), ty.child(0));
     assert_eq!(&Field::new(String::from("f2"), Ty::int32()), ty.child(1));
@@ -340,7 +340,7 @@ mod tests {
     assert_eq!(&Field::new(String::from("f1"), Ty::date32_with_unit(DateUnit::Day)), ty.child(0));
     assert_eq!(&Field::new(String::from("f2"), Ty::int32()), ty.child(1));
 
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer()], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::type_buffer()], ty.get_buffer_layout());
 
     let ty = Ty::union_with_mode(
       vec![
@@ -351,7 +351,7 @@ mod tests {
       UnionMode::DENSE
     );
     assert_eq!(&UnionMode::DENSE, ty.union_mode());
-    assert_eq!(vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer(), BufferDesc::k_offset_buffer()], ty.get_buffer_layout());
+    assert_eq!(vec![BufferDesc::validity_buffer(), BufferDesc::type_buffer(), BufferDesc::offset_buffer()], ty.get_buffer_layout());
   }
 
 //  #[test]

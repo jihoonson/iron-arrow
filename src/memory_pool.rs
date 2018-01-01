@@ -105,15 +105,15 @@ impl MemoryPool for DefaultMemoryPool {
   }
 }
 
-static K_ALIGNMENT: usize = 64;
+const ALIGNMENT: usize = 64;
 
 fn allocate_aligned(size: i64) -> Result<*const u8, ArrowError> {
   unsafe {
     let mut page: *mut libc::c_void = mem::uninitialized();
-    let result = libc::posix_memalign(&mut page, K_ALIGNMENT, size as usize);
+    let result = libc::posix_memalign(&mut page, ALIGNMENT, size as usize);
     match result {
       libc::ENOMEM => Err(ArrowError::out_of_memory(format!("malloc of size {} failed", size))),
-      libc::EINVAL => Err(ArrowError::invalid(format!("invalid alignment parameter: {}", K_ALIGNMENT))),
+      libc::EINVAL => Err(ArrowError::invalid(format!("invalid alignment parameter: {}", ALIGNMENT))),
       _ => Ok(mem::transmute::<*mut libc::c_void, *const u8>(page))
     }
   }

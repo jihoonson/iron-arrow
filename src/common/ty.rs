@@ -15,7 +15,7 @@ use std::fmt::{Debug, Formatter, Error};
 /// nested type consisting of other data types, or another data type (e.g. a
 /// timestamp encoded as an int64)
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum Ty { // TODO => generic trait. impl DataType<Ty> for Ty
+pub enum Ty {
   // A degenerate NULL type represented as 0 bytes/bits
   NA,
 
@@ -48,7 +48,7 @@ pub enum Ty { // TODO => generic trait. impl DataType<Ty> for Ty
   Binary,
 
   // Fixed-size binary. Each value occupies the same number of bytes
-  FixedSizedBinary {
+  FixedSizeBinary {
     byte_width: i32
   },
 
@@ -148,28 +148,28 @@ impl BufferDesc {
     }
   }
 
-  pub fn k_validity_buffer() -> BufferDesc {
+  pub fn validity_buffer() -> BufferDesc {
     BufferDesc {
       ty: BufferType::Validity,
       bit_width: 1
     }
   }
 
-  pub fn k_offset_buffer() -> BufferDesc {
+  pub fn offset_buffer() -> BufferDesc {
     BufferDesc {
       ty: BufferType::Offset,
       bit_width: 32
     }
   }
 
-  pub fn k_type_buffer() -> BufferDesc {
+  pub fn type_buffer() -> BufferDesc {
     BufferDesc {
       ty: BufferType::Type,
       bit_width: 32
     }
   }
 
-  pub fn k_data_buffer(bit_width: i32) -> BufferDesc {
+  pub fn data_buffer(bit_width: i32) -> BufferDesc {
     BufferDesc {
       ty: BufferType::Data,
       bit_width
@@ -239,7 +239,7 @@ impl Ty {
   }
 
   pub fn fixed_sized_binary(byte_width: i32) -> Ty {
-    Ty::FixedSizedBinary {
+    Ty::FixedSizeBinary {
       byte_width
     }
   }
@@ -408,7 +408,7 @@ impl Ty {
       &Ty::Float => 32,
       &Ty::Double => 64,
 
-      &Ty::FixedSizedBinary { byte_width } => byte_width * 8,
+      &Ty::FixedSizeBinary { byte_width } => byte_width * 8,
 
       &Ty::Date32 { ref unit } => 32,
       &Ty::Date64 { ref unit } => 64,
@@ -429,45 +429,45 @@ impl Ty {
   pub fn get_buffer_layout(&self) -> Vec<BufferDesc> {
     match self {
       &Ty::NA => Vec::new(),
-      &Ty::Bool => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 1)],
+      &Ty::Bool => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 1)],
 
-      &Ty::UInt8 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 8)],
-      &Ty::Int8 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 8)],
-      &Ty::UInt16 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
-      &Ty::Int16 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
-      &Ty::UInt32 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &Ty::Int32 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &Ty::UInt64 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
-      &Ty::Int64 => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::UInt8 => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 8)],
+      &Ty::Int8 => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 8)],
+      &Ty::UInt16 => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
+      &Ty::Int16 => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
+      &Ty::UInt32 => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::Int32 => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::UInt64 => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Int64 => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
 
-      &Ty::HalfFloat => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
-      &Ty::Float => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &Ty::Double => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::HalfFloat => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 16)],
+      &Ty::Float => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::Double => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
 
-      &Ty::String => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::new(BufferType::Data, 8)],
-      &Ty::Binary => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::new(BufferType::Data, 8)],
+      &Ty::String => vec![BufferDesc::validity_buffer(), BufferDesc::offset_buffer(), BufferDesc::new(BufferType::Data, 8)],
+      &Ty::Binary => vec![BufferDesc::validity_buffer(), BufferDesc::offset_buffer(), BufferDesc::new(BufferType::Data, 8)],
 
-      &Ty::FixedSizedBinary { byte_width } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, byte_width * 8)],
+      &Ty::FixedSizeBinary { byte_width } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, byte_width * 8)],
 
-      &Ty::Date32 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &Ty::Date64 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Date32 { ref unit } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::Date64 { ref unit } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
 
-      &Ty::Timestamp { ref unit, ref timezone } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
-      &Ty::Time32 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
-      &Ty::Time64 { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
-      &Ty::Interval { ref unit } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Timestamp { ref unit, ref timezone } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Time32 { ref unit } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 32)],
+      &Ty::Time64 { ref unit } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
+      &Ty::Interval { ref unit } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 64)],
 
-      &Ty::Decimal { precision, scale } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, 16 * 8)],
+      &Ty::Decimal { precision, scale } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, 16 * 8)],
 
-      &Ty::List { ref value_type } => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer()],
-      &Ty::Struct { ref fields } => vec![BufferDesc::k_validity_buffer()],
+      &Ty::List { ref value_type } => vec![BufferDesc::validity_buffer(), BufferDesc::offset_buffer()],
+      &Ty::Struct { ref fields } => vec![BufferDesc::validity_buffer()],
       &Ty::Union { ref fields, ref type_codes, ref mode } => {
         match mode {
-          &UnionMode::SPARSE => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer()],
-          _ => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer(), BufferDesc::k_offset_buffer()]
+          &UnionMode::SPARSE => vec![BufferDesc::validity_buffer(), BufferDesc::type_buffer()],
+          _ => vec![BufferDesc::validity_buffer(), BufferDesc::type_buffer(), BufferDesc::offset_buffer()]
         }
       },
-      &Ty::Dictionary { ref index_type, ref dictionary, ordered } => vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
+      &Ty::Dictionary { ref index_type, ref dictionary, ordered } => vec![BufferDesc::validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
     }
   }
 
@@ -488,7 +488,7 @@ impl Ty {
       &Ty::Double => "double",
       &Ty::String => "utf8",
       &Ty::Binary => "binary",
-      &Ty::FixedSizedBinary { byte_width } => "fixed_size_binary",
+      &Ty::FixedSizeBinary { byte_width } => "fixed_size_binary",
       &Ty::Date32 { ref unit } => "date32",
       &Ty::Date64 { ref unit } => "date64",
       &Ty::Timestamp { ref unit, ref timezone } => "timestamp",

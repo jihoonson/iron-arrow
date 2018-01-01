@@ -78,11 +78,11 @@ mod tests {
     use buffer::{Buffer, MutableBuffer, ResizableBuffer, PoolBuffer};
 
     let mut buffer = PoolBuffer::new(Arc::new(RefCell::new(DefaultMemoryPool::new())));
-    let mut buffer = buffer.reserve(100).unwrap();
+    buffer.reserve(100).unwrap();
     assert_eq!(128, buffer.capacity());
     assert_eq!(0, buffer.size());
 
-    let mut buffer = buffer.resize(10).unwrap();
+    buffer.resize(10).unwrap();
     assert_eq!(128, buffer.capacity());
     assert_eq!(10, buffer.size());
   }
@@ -113,15 +113,4 @@ mod tests {
 //    assert_eq!(&DataType::int32(), data.data_type());
 //    assert_eq!(100, data.len());
 //  }
-
-  #[test]
-  fn test_null_array() {
-    use array::Array;
-
-    let arr = Array::null(100, 0);
-
-    assert_eq!(100, arr.len());
-    assert_eq!(0, arr.offset());
-    assert!(arr.is_null(37));
-  }
 }

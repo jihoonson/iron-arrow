@@ -23,10 +23,10 @@ pub trait MutableBuffer {
   fn data_as_mut(&mut self) -> *mut u8;
 }
 
-pub trait ResizableBuffer<T> {
-  fn resize(&mut self, new_size: i64) -> Result<&mut T, ArrowError>;
+pub trait ResizableBuffer {
+  fn resize(&mut self, new_size: i64) -> Result<(), ArrowError>;
 
-  fn reserve(&mut self, new_capacity: i64) -> Result<&mut T, ArrowError>;
+  fn reserve(&mut self, new_capacity: i64) -> Result<(), ArrowError>;
 }
 
 fn resize(pool: &mut Arc<RefCell<MemoryPool>>, page: *const u8, size: i64, capacity: i64, new_size: i64) -> Result<(*const u8, i64, i64), ArrowError> {
@@ -76,6 +76,7 @@ fn as_mut<T>(p: *const u8) -> *mut T {
 // Eq, PartialEq
 // Copy?
 
+#[derive(Clone)]
 pub struct PoolBuffer {
   pool: Arc<RefCell<MemoryPool>>,
   page: *const u8,
@@ -120,6 +121,16 @@ impl PoolBuffer {
   pub fn data(&self) -> *const u8 {
     self.page
   }
+
+  pub fn clear(&self, offset: i64, len: i64) {
+    if self.capacity > 0 {
+      unsafe { libc::memset(mem::transmute::<*const u8, *mut libc::c_void>(self.page.offset(offset as isize)), 0, len as libc::size_t); }
+    }
+  }
+
+  pub fn as_vec<T>(&self) -> Vec<T> {
+    unsafe { Vec::from_raw_parts(as_mut(self.page), self.size as usize, self.capacity as usize) }
+  }
 }
 
 impl PartialEq for PoolBuffer {
@@ -143,25 +154,25 @@ impl MutableBuffer for PoolBuffer {
   }
 }
 
-impl ResizableBuffer<PoolBuffer> for PoolBuffer {
-  fn resize(&mut self, new_size: i64) -> Result<&mut PoolBuffer, ArrowError> {
+impl ResizableBuffer for PoolBuffer {
+  fn resize(&mut self, new_size: i64) -> Result<(), ArrowError> {
     match resize(&mut self.pool, self.page, self.size, self.capacity, new_size) {
       Ok((new_page, new_size, new_capacity)) => {
         self.page = new_page;
         self.size = new_size;
         self.capacity = new_capacity;
-        Ok(self)
+        Ok(())
       },
       Err(e) => Err(e)
     }
   }
 
-  fn reserve(&mut self, new_capacity: i64) -> Result<&mut PoolBuffer, ArrowError> {
+  fn reserve(&mut self, new_capacity: i64) -> Result<(), ArrowError> {
     match reserve(&mut self.pool, self.page, self.capacity, new_capacity) {
       Ok((new_page, new_capacity)) => {
         self.page = new_page;
         self.capacity = new_capacity;
-        Ok(self)
+        Ok(())
       },
       Err(e) => Err(e)
     }
@@ -177,9 +188,9 @@ impl Drop for PoolBuffer {
 }
 
 pub trait TypedBufferBuilder<T> {
-  fn append_typed_val(&mut self, val: T) -> Result<&mut TypedBufferBuilder<T>, ArrowError>;
+  fn append_typed_val(&mut self, val: T) -> Result<(), ArrowError>;
 
-  fn append_typed_vals(&mut self, vals: *const T, num_vals: i64) -> Result<&mut TypedBufferBuilder<T>, ArrowError>;
+  fn append_typed_vals(&mut self, vals: *const T, num_vals: i64) -> Result<(), ArrowError>;
 
   fn unsafe_append_typed_val(&mut self, val: T);
 
@@ -203,9 +214,9 @@ impl BufferBuilder {
     }
   }
 
-  pub fn resize(&mut self, elements: i64) -> Result<&mut BufferBuilder, ArrowError> {
+  pub fn resize(&mut self, elements: i64) -> Result<(), ArrowError> {
     if elements == 0 {
-      Ok(self)
+      Ok(())
     } else {
       let old_capacity = self.capacity;
       match resize(&mut self.pool, self.page, self.size, self.capacity, elements) {
@@ -217,7 +228,7 @@ impl BufferBuilder {
               libc::memset(as_mut(self.page), 0, (new_capacity - old_capacity) as usize);
             }
           }
-          Ok(self)
+          Ok(())
         },
         Err(e) => Err(e)
       }
@@ -236,23 +247,23 @@ impl BufferBuilder {
     }
   }
 
-  pub fn append(&mut self, data: *const u8, len: i64) -> Result<&mut BufferBuilder, ArrowError> {
+  pub fn append(&mut self, data: *const u8, len: i64) -> Result<(), ArrowError> {
     if self.capacity < len + self.size {
       let new_capacity = bit_util::next_power_2(len + self.size);
       match self.resize(new_capacity) {
-        Ok(buffer_builder) => {
-          buffer_builder.unsafe_append(data, len);
-          Ok(buffer_builder)
+        Ok(_) => {
+          self.unsafe_append(data, len);
+          Ok(())
         },
         Err(e) => Err(e)
       }
     } else {
       self.unsafe_append(data, len);
-      Ok(self)
+      Ok(())
     }
   }
 
-  pub fn advance(&mut self, len: i64) -> Result<&mut BufferBuilder, ArrowError> {
+  pub fn advance(&mut self, len: i64) -> Result<(), ArrowError> {
     if self.capacity < len + self.size {
       match resize(&mut self.pool, self.page, self.size, self.capacity, self.size + len) {
         Ok((new_page, new_size, new_capacity)) => {
@@ -267,7 +278,7 @@ impl BufferBuilder {
             );
           }
           self.size += len;
-          Ok(self)
+          Ok(())
         },
         Err(e) => Err(e)
       }
@@ -280,7 +291,7 @@ impl BufferBuilder {
         );
       }
       self.size += len;
-      Ok(self)
+      Ok(())
     }
   }
 
@@ -291,16 +302,16 @@ impl BufferBuilder {
 
 impl<T> TypedBufferBuilder<T> for BufferBuilder {
 
-  fn append_typed_val(&mut self, val: T) -> Result<&mut TypedBufferBuilder<T>, ArrowError> {
+  fn append_typed_val(&mut self, val: T) -> Result<(), ArrowError> {
     self.append_typed_vals(&val, 1)
   }
 
-  fn append_typed_vals(&mut self, vals: *const T, num_vals: i64) -> Result<&mut TypedBufferBuilder<T>, ArrowError> {
+  fn append_typed_vals(&mut self, vals: *const T, num_vals: i64) -> Result<(), ArrowError> {
     match self.append(
       unsafe { mem::transmute::<*const T, *const u8>(vals) },
       num_vals * mem::size_of::<T>() as i64
     ) {
-      Ok(buffer_builder) => Ok(buffer_builder),
+      Ok(_) => Ok(()),
       Err(e) => Err(e)
     }
   }

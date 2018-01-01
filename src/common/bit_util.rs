@@ -9,7 +9,18 @@ const FORCE_CARRY_ADDEND: i64 = 64 - 1;
 const TRUNCATE_BITMASK: i64 = !(64 - 1);
 const MAX_ROUNDABLE_NUM: i64 = i64::MAX - 64;
 
-const K_BITMASK: [u8; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
+const BITMASK: [u8; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
+const FLIPPED_BITMASK: [u8; 8] = [254, 253, 251, 247, 239, 223, 191, 127];
+
+#[inline]
+pub fn ceil_byte(i: i64) -> i64 {
+  (i + 7) & !7
+}
+
+#[inline]
+pub fn bytes_for_bits(i: i64) -> i64 {
+  ceil_byte(i) / 8
+}
 
 #[inline]
 pub fn round_up_to_multiple_of_64(val: i64) -> i64 {
@@ -39,12 +50,26 @@ pub fn next_power_2(val: i64) -> i64 {
 
 #[inline]
 pub fn bit_not_set(bits: *const u8, i: i64) -> bool {
-  (unsafe { *bits.offset(i as isize / 8) as u8 } & K_BITMASK[i as usize % 8]) == 0
+  (unsafe { *bits.offset(i as isize / 8) as u8 } & BITMASK[i as usize % 8]) == 0
 }
 
 #[inline]
 pub fn get_bit(bits: *const u8, i: i64) -> bool {
-  (unsafe { *bits.offset(i as isize / 8) as u8 } & K_BITMASK[i as usize % 8]) != 0
+  (unsafe { *bits.offset(i as isize / 8) as u8 } & BITMASK[i as usize % 8]) != 0
+}
+
+#[inline]
+pub fn set_bit(bits: *mut u8, i: i64) {
+  unsafe {
+    *bits.offset(i as isize / 8) = *bits.offset(i as isize / 8) | BITMASK[i as usize % 8];
+  }
+}
+
+#[inline]
+pub fn clear_bit(bits: *mut u8, i: i64) {
+  unsafe {
+    *bits.offset(i as isize / 8) = FLIPPED_BITMASK[i as usize % 8];
+  }
 }
 
 const pop_len: i64 = (mem::size_of::<i64>() * 8) as i64;
@@ -90,11 +115,52 @@ pub fn count_set_bits(data: *const u8, bit_offset: i64, len: i64) -> i64 {
 
 #[cfg(test)]
 mod test {
+  use memory_pool::DefaultMemoryPool;
+  use buffer::{PoolBuffer, ResizableBuffer, MutableBuffer};
+  use std::sync::Arc;
+  use std::cell::RefCell;
+
   #[test]
-  fn test_git_bit() {
-    use common::bit_util::get_bit;
+  fn test_set_get_bit() {
+    use common::bit_util::{set_bit, get_bit};
 
+    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
+    let mut buffer = PoolBuffer::new(pool.clone());
+    buffer.reserve(100);
 
+    let mut data = buffer.data_as_mut();
+    let mut true_indexes: Vec<i64> = Vec::new();
+    let mut i = 0;
+    while i < 100 {
+      set_bit(data, i);
+      true_indexes.push(i);
+      i = i * 2 + 1;
+    }
+
+    let data = buffer.data();
+    for i in 0..100 {
+      if true_indexes.contains(&i) {
+        assert!(get_bit(data, i));
+      } else {
+        assert_eq!(false, get_bit(data, i));
+      }
+    }
+  }
+
+  #[test]
+  fn test_clear_bit() {
+    use common::bit_util::{set_bit, get_bit, clear_bit};
+
+    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
+    let mut buffer = PoolBuffer::new(pool.clone());
+    buffer.reserve(5);
+
+    let mut data = buffer.data_as_mut();
+    assert_eq!(false, get_bit(data, 2));
+    set_bit(data, 2);
+    assert!(get_bit(data, 2));
+    clear_bit(data, 2);
+    assert_eq!(false, get_bit(data, 2));
   }
 
   #[test]
@@ -125,13 +191,13 @@ mod test {
   fn test_count_set_bits() {
     use common::bit_util::count_set_bits;
 
-    let k_buf_size = 1000;
+    let buf_size = 1000;
     let mut buf: [u8; 1000] = [0; 1000];
     random_bytes(&mut buf);
 
     let p = buf.as_ptr();
 
-    let num_bits = (k_buf_size * 8) as i64;
+    let num_bits = (buf_size * 8) as i64;
 
     let offsets: Vec<i64> = vec![0, 12, 16, 32, 37, 63, 64, 128, num_bits - 30, num_bits - 64];
 

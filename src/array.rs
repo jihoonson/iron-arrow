@@ -11,92 +11,120 @@ use std::mem;
 use std::fmt::{Debug, Formatter, Error};
 
 #[derive(Eq, PartialEq)]
-pub struct ArrayMeta {
+pub struct Array {
   ty: Ty,
   length: i64,
-  null_count: i64,
   offset: i64,
+  null_count: i64,
   null_bitmap: Option<PoolBuffer>,
-  values: Option<PoolBuffer> // TODO => Move to ArrayData
-//  children: Vec<ArrayData>
+  data: ArrayData
 }
 
-impl ArrayMeta {
-  pub fn new(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>) -> ArrayMeta {
-    ArrayMeta::create(ty, length, ArrayMeta::compute_null_count(&null_bitmap, offset, length), offset, null_bitmap, values)
+pub enum ArrayData {
+  Null,
+  Bool {
+    values: Vec<bool>
+  },
+
+  UInt8 {
+    values: Vec<u8>
+  },
+  Int8 {
+    values: Vec<i8>
+  },
+  UInt16 {
+    values: Vec<u16>
+  },
+  Int16 {
+    values: Vec<i16>
+  },
+  UInt32 {
+    values: Vec<u32>
+  },
+  Int32 {
+    values: Vec<i32>
+  },
+  UInt64 {
+    values: Vec<u64>
+  },
+  Int64 {
+    values: Vec<i64>
+  },
+
+  HalfFloat {
+    values: Vec<u16>
+  },
+  Float {
+    values: Vec<f32>
+  },
+  Double {
+    values: Vec<f64>
+  },
+
+  Binary {
+    value_offsets: *const i32, // TODO => maybe Vec<i32>,
+    values: *const u8
+  },
+  String {
+    value_offsets: *const i32,
+    values: *const u8
+  },
+  FixedSizeBinary {
+    values: *const u8
+  },
+
+  Date64 {
+    values: Vec<i64>
+  },
+  Date32 {
+    values: Vec<i32>
+  },
+  Timestamp {
+    values: Vec<i64>
+  },
+  Time32 {
+    values: Vec<i32>
+  },
+  Time64 {
+    values: Vec<i64>
+  },
+  Interval {
+    values: Vec<i64>
+  },
+
+  Decimal {
+    values: *const u8
+  },
+
+  List {
+    value_offsets: *const i32,
+    value_array: Box<Array>
+  },
+  Struct {
+    fields: Vec<Box<Array>>
+  },
+  Union {
+    fields: Vec<Box<Array>>,
+    value_offsets: *const i32
+  },
+
+  Dictionary {
+    indices: Box<Array>
   }
+}
 
-  pub fn null(length: i64, offset: i64) -> ArrayMeta {
-    ArrayMeta::create(Ty::null(), length, length, offset, None, None)
+impl PartialEq for ArrayData {
+  fn eq(&self, other: &Self) -> bool {
+    // TODO
+    unimplemented!()
   }
+}
 
-  fn create(ty: Ty, length: i64, null_count: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Option<PoolBuffer>) -> ArrayMeta {
-    ArrayMeta {
-      ty,
-      length,
-      null_count,
-      offset,
-      null_bitmap,
-      values
-//      children
-    }
-  }
+impl Eq for ArrayData {
 
-  #[inline]
-  pub fn data_type(&self) -> &Ty {
-    &self.ty
-  }
+}
 
-  #[inline]
-  pub fn len(&self) -> i64 {
-    self.length
-  }
-
-  #[inline]
-  pub fn null_count(&self) -> i64 {
-    self.null_count
-  }
-
-  #[inline]
-  pub fn offset(&self) -> i64 {
-    self.offset
-  }
-
-  #[inline]
-  pub fn null_bitmap_buffer(&self) -> &Option<PoolBuffer> {
-    &self.null_bitmap
-  }
-
-  #[inline]
-  pub fn values_buffer(&self) -> &Option<PoolBuffer> {
-    &self.values
-  }
-
-//  #[inline]
-//  pub fn raw_null_bitmap(&self) -> *const u8 {
-//    self.null_bitmap.data()
-//  }
-
-//  #[inline]
-//  pub fn raw_values(&self) -> *const u8 {
-//    self.values.data()
-//  }
-
-//  #[inline]
-//  pub fn children(&self) -> &Vec<ArrayData> {
-//    &self.children
-//  }
-//
-//  #[inline]
-//  pub fn child(&self, i: usize) -> &ArrayData {
-//    &self.children[i]
-//  }
-//
-//  #[inline]
-//  pub fn num_children(&self) -> i32 {
-//    self.children.len() as i32
-//  }
-
+impl Array {
   #[inline]
   fn compute_null_count(null_bitmap: &Option<PoolBuffer>, offset: i64, length: i64) -> i64 {
     match null_bitmap {
@@ -110,139 +138,100 @@ impl ArrayMeta {
       },
       &None => 0
     }
-
-  }
-}
-
-#[derive(Eq, PartialEq)]
-pub struct Array {
-  data: ArrayMeta,
-  meta: ArrayData
-}
-
-#[derive(Eq, PartialEq)]
-pub enum ArrayData {
-  Null,
-  Bool,
-
-  UInt8,
-  Int8,
-  UInt16,
-  Int16,
-  UInt32,
-  Int32,
-  UInt64,
-  Int64,
-
-  HalfFloat,
-  Float,
-  Double,
-
-  Binary {
-    value_offsets: *const i32
-  },
-  String {
-    value_offsets: *const i32
-  },
-  FixedSizedBinary,
-
-  Date64,
-  Date32,
-  Timestamp,
-  Time32,
-  Time64,
-  Interval,
-
-  Decimal,
-
-  List {
-    values: Box<Array>,
-    value_offsets: *const i32
-  },
-  Struct,
-  Union,
-
-  Dictionary
-}
-
-impl Array {
-  pub fn primitive(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
-    Array::fixed_width(ArrayMeta::new(ty, length, offset, null_bitmap, Some(values)))
   }
 
-  pub fn fixed_size_binary(byte_width: i32, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
-    Array::fixed_width(ArrayMeta::new(Ty::fixed_sized_binary(byte_width), length, offset, null_bitmap, Some(values)))
+  pub fn primitive(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer) -> Array {
+    Array::fixed_width(ty, length, offset, null_bitmap, values)
   }
 
   pub fn null(length: i64, offset: i64) -> Array {
-    Array::fixed_width(ArrayMeta::null(length, offset))
-  }
-
-  fn fixed_width(data: ArrayMeta) -> Array {
-    let meta = match data.data_type() {
-      &Ty::NA => ArrayData::Null,
-      &Ty::Bool => ArrayData::Bool,
-
-      &Ty::Int8 => ArrayData::Int8,
-      &Ty::Int16 => ArrayData::Int16,
-      &Ty::Int32 => ArrayData::Int32,
-      &Ty::Int64 => ArrayData::Int64,
-      &Ty::UInt8 => ArrayData::UInt8,
-      &Ty::UInt16 => ArrayData::UInt16,
-      &Ty::UInt32 => ArrayData::UInt32,
-      &Ty::UInt64 => ArrayData::UInt64,
-
-      &Ty::HalfFloat => ArrayData::HalfFloat,
-      &Ty::Float => ArrayData::Float,
-      &Ty::Double => ArrayData::Double,
-
-      &Ty::Date64 { unit: ref _unit } => ArrayData::Date64,
-      &Ty::Date32 { unit: ref _unit } => ArrayData::Date32,
-      &Ty::Time64 { unit: ref _unit } => ArrayData::Time64,
-      &Ty::Time32 { unit: ref _unit } => ArrayData::Time32,
-      &Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => ArrayData::Timestamp,
-      &Ty::Interval { unit: ref _unit } => ArrayData::Interval,
-
-      &Ty::FixedSizedBinary { byte_width } => ArrayData::FixedSizedBinary,
-
-      _ => panic!("[{:?}] is not supported type", data.data_type())
-    };
-
     Array {
-      data,
-      meta,
+      ty: Ty::null(),
+      length,
+      offset,
+      null_count: length,
+      null_bitmap: None,
+      data: ArrayData::Null
     }
   }
 
-  pub fn variable_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer, value_offsets: PoolBuffer) -> Array {
-    let data = ArrayMeta::new(ty, length, offset, null_bitmap, Some(values));
-    let meta = match data.data_type() {
-      &Ty::Binary => ArrayData::Binary {
-        value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) }
+  pub fn fixed_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer) -> Array {
+    let data = match ty {
+      Ty::NA => ArrayData::Null,
+      Ty::Bool => ArrayData::Bool { values: values.as_vec() },
+
+      Ty::Int8 => ArrayData::Int8 { values: values.as_vec() },
+      Ty::Int16 => ArrayData::Int16 { values: values.as_vec() },
+      Ty::Int32 => ArrayData::Int32 { values: values.as_vec() },
+      Ty::Int64 => ArrayData::Int64 { values: values.as_vec() },
+      Ty::UInt8 => ArrayData::UInt8 { values: values.as_vec() },
+      Ty::UInt16 => ArrayData::UInt16 { values: values.as_vec() },
+      Ty::UInt32 => ArrayData::UInt32 { values: values.as_vec() },
+      Ty::UInt64 => ArrayData::UInt64 { values: values.as_vec() },
+
+      Ty::HalfFloat => ArrayData::HalfFloat { values: values.as_vec() },
+      Ty::Float => ArrayData::Float { values: values.as_vec() },
+      Ty::Double => ArrayData::Double { values: values.as_vec() },
+
+      Ty::Date64 { unit: ref _unit } => ArrayData::Date64 { values: values.as_vec() },
+      Ty::Date32 { unit: ref _unit } => ArrayData::Date32 { values: values.as_vec() },
+      Ty::Time64 { unit: ref _unit } => ArrayData::Time64 { values: values.as_vec() },
+      Ty::Time32 { unit: ref _unit } => ArrayData::Time32 { values: values.as_vec() },
+      Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => ArrayData::Timestamp { values: values.as_vec() },
+      Ty::Interval { unit: ref _unit } => ArrayData::Interval { values: values.as_vec() },
+
+      Ty::FixedSizeBinary { byte_width } => ArrayData::FixedSizeBinary { values: values.data() },
+      Ty::Decimal { precision: _precision, scale: _scale } => ArrayData::Decimal { values: values.data() },
+
+      _ => panic!("[{:?}] is not supported type", ty)
+    };
+
+    Array {
+      ty,
+      length,
+      offset,
+      null_count: Array::compute_null_count(&null_bitmap, offset, length),
+      null_bitmap,
+      data,
+    }
+  }
+
+  pub fn variable_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer, value_offsets: &PoolBuffer) -> Array {
+    let data = match ty {
+      Ty::Binary => ArrayData::Binary {
+        value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) },
+        values: values.data()
       },
       _ => panic!()
     };
 
     Array {
-      data,
-      meta
+      ty,
+      length,
+      offset,
+      null_count: Array::compute_null_count(&null_bitmap, offset, length),
+      null_bitmap,
+      data
     }
   }
 
-  pub fn list(value_type: Box<Ty>, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: Array, value_offsets: PoolBuffer) -> Array {
-    let data = ArrayMeta::new(Ty::list(value_type), length, offset, null_bitmap, None);
-    let meta = ArrayData::List {
-      values: Box::new(values),
-      value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) }
+  pub fn list(value_type: Box<Ty>, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, value_array: Array, value_offsets: &PoolBuffer) -> Array {
+    let data = ArrayData::List {
+      value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) },
+      value_array: Box::new(value_array)
     };
     Array {
-      data,
-      meta
+      ty: Ty::list(value_type),
+      length,
+      offset,
+      null_count: Array::compute_null_count(&null_bitmap, offset, length),
+      null_bitmap,
+      data
     }
   }
 
   pub fn is_null(&self, i: i64) -> bool {
-    match self.data_type() {
+    match self.ty() {
       &Ty::NA => true,
       _ => match self.null_bitmap_buffer() {
         &Some(ref bitmap) => bit_util::bit_not_set(bitmap.data(), i + self.offset()),
@@ -252,7 +241,7 @@ impl Array {
   }
 
   pub fn is_valid(&self, i: i64) -> bool {
-    match self.data_type() {
+    match self.ty() {
       &Ty::NA => false,
       _ => match self.null_bitmap_buffer() {
         &Some(ref bitmap) => bit_util::get_bit(bitmap.data(), i + self.offset()),
@@ -263,41 +252,31 @@ impl Array {
 
   #[inline]
   pub fn len(&self) -> i64 {
-    self.data.len()
+    self.length
   }
 
   #[inline]
   pub fn offset(&self) -> i64 {
-    self.data.offset()
+    self.offset
   }
 
   #[inline]
   pub fn null_count(&self) -> i64 {
-    self.data.null_count()
-  }
-
-  #[inline]
-  pub fn data_type(&self) -> &Ty {
-    self.data.data_type()
+    self.null_count
   }
 
   #[inline]
   pub fn ty(&self) -> &Ty {
-    self.data.data_type()
+    &self.ty
   }
 
   #[inline]
   pub fn null_bitmap_buffer(&self) -> &Option<PoolBuffer> {
-    self.data.null_bitmap_buffer()
+    &self.null_bitmap
   }
 
   #[inline]
-  pub fn value_buffer(&self) -> &Option<PoolBuffer> {
-    self.data.values_buffer()
-  }
-
-  #[inline]
-  pub fn data(&self) -> &ArrayMeta {
+  pub fn data(&self) -> &ArrayData {
     &self.data
   }
 }
@@ -314,41 +293,11 @@ impl Clone for Box<Array> {
   }
 }
 
-// TODO: maybe need cast?
-pub trait PrimitiveArray<T> {
-  fn value(&self, i: i64) -> T;
-
-  fn values(&self) -> *const T;
+fn raw_value<T: Copy>(values: *const T, i: i64) -> T {
+  unsafe { *values.offset(i as isize) }
 }
 
-impl PrimitiveArray<bool> for Array {
-  fn value(&self, i: i64) -> bool {
-    match self.ty() {
-      &Ty::Bool => match self.value_buffer() {
-        &Some(ref buffer) => bit_util::get_bit(buffer.data(), i + self.data.offset()),
-        &None => panic!("value buffer doesn't exist")
-      },
-      _ => panic!("{:?} is not a boolean array", self.ty())
-    }
-  }
-
-  fn values(&self) -> *const bool {
-    match self.ty() {
-      &Ty::Bool => match self.value_buffer() {
-        &Some(ref buffer) => {
-          unsafe {
-            use std::ptr;
-            mem::transmute::<*const u8, *const bool>(buffer.data().offset(self.data.offset() as isize))
-          }
-        },
-        &None => panic!("value buffer doesn't exist")
-      },
-      _ => panic!("{:?} is not a boolean array", self.ty())
-    }
-  }
-}
-
-fn values<T>(value_buffer: &Option<PoolBuffer>, offset: i64) -> *const T {
+fn raw_values<T>(value_buffer: &Option<PoolBuffer>, offset: i64) -> *const T {
   match value_buffer {
     &Some(ref buffer) => {
       unsafe {
@@ -360,68 +309,97 @@ fn values<T>(value_buffer: &Option<PoolBuffer>, offset: i64) -> *const T {
   }
 }
 
+// TODO: maybe need cast?
+pub trait PrimitiveArray<T: Copy> {
+  fn prim_value(&self, i: i64) -> T;
+
+  fn prim_values(&self) -> &[T];
+//  fn values(&self) -> *const T;
+}
+
+impl PrimitiveArray<bool> for Array {
+  fn prim_value(&self, i: i64) -> bool {
+    match self.data() {
+      &ArrayData::Bool { ref values } => values[i as usize],
+      _ => panic!("{:?} is not a boolean array", self.ty())
+    }
+  }
+
+  fn prim_values(&self) -> &[bool] {
+    match self.data() {
+      &ArrayData::Bool { ref values } => values.as_slice(),
+      _ => panic!("{:?} is not a boolean array", self.ty())
+    }
+  }
+}
+
 macro_rules! impl_primitive_array {
     ($ty: path, $prim_ty: ident) => {
       impl PrimitiveArray<$prim_ty> for Array {
-        fn value(&self, i: i64) -> $prim_ty {
-          unsafe { *self.values().offset(i as isize) }
+        fn prim_value(&self, i: i64) -> $prim_ty {
+          match self.data() {
+            &$ty { ref values } => values[i as usize],
+            _ => panic!("{:?} is not a boolean array", self.ty())
+          }
         }
 
-        fn values(&self) -> *const $prim_ty {
-          match self.ty() {
-            &$ty => values(self.value_buffer(), self.data().offset()),
+        fn prim_values(&self) -> &[$prim_ty] {
+          match self.data() {
+            &$ty { ref values } => values.as_slice(),
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
       }
     };
 
-    ($ty1: pat, $ty2: pat, $prim_ty: ident) => {
+    ($ty1: path, $ty2: path, $prim_ty: ident) => {
       impl PrimitiveArray<$prim_ty> for Array {
-        fn value(&self, i: i64) -> $prim_ty {
-          unsafe { *self.values().offset(i as isize) }
+        fn prim_value(&self, i: i64) -> $prim_ty {
+          match self.data() {
+            &$ty1 { ref values } | &$ty2 { ref values } => values[i as usize],
+            _ => panic!("{:?} is not a boolean array", self.ty())
+          }
         }
 
-        fn values(&self) -> *const $prim_ty {
-          match self.ty() {
-            &$ty1 => values(self.value_buffer(), self.data().offset()),
-            &$ty2 => values(self.value_buffer(), self.data().offset()),
+        fn prim_values(&self) -> &[$prim_ty] {
+          match self.data() {
+            &$ty1 { ref values } | &$ty2 { ref values } => values.as_slice(),
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
       }
     };
 
-    ($ty1: pat, $ty2: pat, $ty3: pat, $prim_ty: ident) => {
+    ($ty1: path, $ty2: path, $ty3: path, $prim_ty: ident) => {
       impl PrimitiveArray<$prim_ty> for Array {
-        fn value(&self, i: i64) -> $prim_ty {
-          unsafe { *self.values().offset(i as isize) }
+        fn prim_value(&self, i: i64) -> $prim_ty {
+          match self.data() {
+            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } => values[i as usize],
+            _ => panic!("{:?} is not a boolean array", self.ty())
+          }
         }
 
-        fn values(&self) -> *const $prim_ty {
-          match self.ty() {
-            &$ty1 => values(self.value_buffer(), self.data().offset()),
-            &$ty2 => values(self.value_buffer(), self.data().offset()),
-            &$ty3 => values(self.value_buffer(), self.data().offset()),
+        fn prim_values(&self) -> &[$prim_ty] {
+          match self.data() {
+            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } => values.as_slice(),
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
       }
     };
 
-    ($ty1: pat, $ty2: pat, $ty3: pat, $ty4: pat, $ty5: pat, $prim_ty: ident) => {
+    ($ty1: path, $ty2: path, $ty3: path, $ty4: path, $ty5: path, $prim_ty: ident) => {
       impl PrimitiveArray<$prim_ty> for Array {
-        fn value(&self, i: i64) -> $prim_ty {
-          unsafe { *self.values().offset(i as isize) }
+        fn prim_value(&self, i: i64) -> $prim_ty {
+          match self.data() {
+            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } | &$ty4 { ref values } | &$ty5 { ref values } => values[i as usize],
+            _ => panic!("{:?} is not a boolean array", self.ty())
+          }
         }
 
-        fn values(&self) -> *const $prim_ty {
-          match self.ty() {
-            &$ty1 => values(self.value_buffer(), self.data().offset()),
-            &$ty2 => values(self.value_buffer(), self.data().offset()),
-            &$ty3 => values(self.value_buffer(), self.data().offset()),
-            &$ty4 => values(self.value_buffer(), self.data().offset()),
-            &$ty5 => values(self.value_buffer(), self.data().offset()),
+        fn prim_values(&self) -> &[$prim_ty] {
+          match self.data() {
+            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } | &$ty4 { ref values } | &$ty5 { ref values } => values.as_slice(),
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
@@ -429,17 +407,17 @@ macro_rules! impl_primitive_array {
     };
 }
 
-impl_primitive_array!(Ty::Int8, i8);
-impl_primitive_array!(Ty::Int16, i16);
-impl_primitive_array!(Ty::Int32, Ty::Date32 { unit: ref _unit }, Ty::Time32 { unit: ref _unit }, i32);
-impl_primitive_array!(Ty::Int64, Ty::Date64 { unit: ref _unit }, Ty::Time64 { unit: ref _unit }, Ty::Timestamp { unit: ref _unit, timezone: ref _timezone }, Ty::Interval { unit: ref _unit }, i64);
-impl_primitive_array!(Ty::UInt8, u8);
-impl_primitive_array!(Ty::UInt16, Ty::HalfFloat, u16);
-impl_primitive_array!(Ty::UInt32, u32);
-impl_primitive_array!(Ty::UInt64, u64);
+impl_primitive_array!(ArrayData::Int8, i8);
+impl_primitive_array!(ArrayData::Int16, i16);
+impl_primitive_array!(ArrayData::Int32, ArrayData::Date32, ArrayData::Time32, i32);
+impl_primitive_array!(ArrayData::Int64, ArrayData::Date64, ArrayData::Time64, ArrayData::Timestamp, ArrayData::Interval, i64);
+impl_primitive_array!(ArrayData::UInt8, u8);
+impl_primitive_array!(ArrayData::UInt16, ArrayData::HalfFloat, u16);
+impl_primitive_array!(ArrayData::UInt32, u32);
+impl_primitive_array!(ArrayData::UInt64, u64);
 
-impl_primitive_array!(Ty::Float, f32);
-impl_primitive_array!(Ty::Double, f64);
+impl_primitive_array!(ArrayData::Float, f32);
+impl_primitive_array!(ArrayData::Double, f64);
 
 pub struct VariableWidthElem {
   p: *const u8,
@@ -468,22 +446,19 @@ fn value_len(value_offsets: &*const i32, i: i64) -> i32 {
 
 impl VariableWidthArray for Array {
   fn value(&self, i: i64) -> VariableWidthElem {
-    match self.meta {
-      ArrayData::Binary { ref value_offsets } | ArrayData::String { ref value_offsets } => {
-        let offset = i + self.data.offset();
+    match self.data {
+      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
+        let offset = i + self.offset();
         unsafe {
           let pos = *value_offsets.offset(i as isize);
           let value_len = *value_offsets.offset((offset + 1) as isize) - pos;
-          match self.data.values_buffer() {
-            &Some(ref buffer) => VariableWidthElem {
-              p: buffer.data().offset(pos as isize),
-              len: value_len
-            },
-            &None => panic!()
+          VariableWidthElem {
+            p: values.offset(pos as isize),
+            len: value_len
           }
         }
       },
-      ArrayData::List { ref values, ref value_offsets } => {
+      ArrayData::List { ref value_offsets, ref value_array } => {
         unimplemented!()
       }
       _ => panic!()
@@ -491,11 +466,11 @@ impl VariableWidthArray for Array {
   }
 
   fn value_offset(&self, i: i64) -> i32 {
-    match self.meta {
-      ArrayData::Binary { ref value_offsets } | ArrayData::String { ref value_offsets } => {
+    match self.data {
+      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
         value_offset(value_offsets, i)
       },
-      ArrayData::List { ref values, ref value_offsets } => {
+      ArrayData::List { ref value_offsets, ref value_array } => {
         value_offset(value_offsets, i)
       },
       _ => panic!()
@@ -503,11 +478,11 @@ impl VariableWidthArray for Array {
   }
 
   fn value_len(&self, i: i64) -> i32 {
-    match self.meta {
-      ArrayData::Binary { ref value_offsets } | ArrayData::String { ref value_offsets } => {
+    match self.data {
+      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
         value_len(value_offsets, i)
       },
-      ArrayData::List { ref values, ref value_offsets } => {
+      ArrayData::List { ref value_offsets, ref value_array } => {
         value_len(value_offsets, i)
       },
       _ => panic!()
@@ -536,28 +511,24 @@ pub trait FixedSizeBinaryArray {
 
 impl FixedSizeBinaryArray for Array {
   fn byte_width(&self) -> i32 {
-    match self.data_type() {
-      &Ty::FixedSizedBinary { byte_width } => byte_width,
+    match self.ty() {
+      &Ty::FixedSizeBinary { byte_width } => byte_width,
       &Ty::Decimal { precision: _precision, scale: _scale } => 16,
-      _ => panic!("{:?} is not fixed sized binary type", self.data_type())
+      _ => panic!("{:?} is not fixed sized binary type", self.ty())
     }
   }
 
   fn fixed_size_value(&self, i: i64) -> *const u8 {
-    match self.value_buffer() {
-      &Some(ref buffer) => {
-        unsafe { buffer.data().offset(((i + self.data.offset()) * self.byte_width() as i64) as isize) }
-      },
-      &None => panic!()
+    match self.data() {
+      &ArrayData::FixedSizeBinary { ref values } => unsafe { values.offset(((self.offset() + i) * self.byte_width() as i64) as isize) },
+      _ => panic!()
     }
   }
 
   fn fixed_size_values(&self) -> *const u8 {
-    match self.value_buffer() {
-      &Some(ref buffer) => {
-        unsafe { buffer.data().offset((self.data.offset() * self.byte_width() as i64) as isize) }
-      },
-      &None => panic!()
+    match self.data() {
+      &ArrayData::FixedSizeBinary { ref values } => unsafe { values.offset((self.offset() * self.byte_width() as i64) as isize) },
+      _ => panic!()
     }
   }
 }
@@ -570,14 +541,14 @@ pub trait ListArray {
 
 impl ListArray for Array {
   fn list_values(&self) -> &Box<Array> {
-    match self.meta {
-      ArrayData::List { ref values, ref value_offsets } => values,
+    match self.data {
+      ArrayData::List { ref value_offsets, ref value_array } => value_array,
       _ => panic!()
     }
   }
 
   fn value_type(&self) -> &Ty {
-    match self.data_type() {
+    match self.ty() {
       &Ty::List { ref value_type } => value_type,
       _ => panic!()
     }
@@ -901,3 +872,17 @@ pub trait Cast {
 //    }
 //  }
 //}
+
+#[cfg(test)]
+mod tests {
+  #[test]
+  fn test_null_array() {
+    use array::Array;
+
+    let arr = Array::null(100, 0);
+
+    assert_eq!(100, arr.len());
+    assert_eq!(0, arr.offset());
+    assert!(arr.is_null(37));
+  }
+}
