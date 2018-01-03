@@ -83,7 +83,7 @@ impl ArrayBuilder {
     self.capacity
   }
 
-  pub fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
+  fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
     match init_buffer(&mut self.null_bitmap, capacity) {
       Ok(_) => {
         self.capacity = capacity;
@@ -159,13 +159,6 @@ impl ArrayBuilder {
   }
 
   pub fn append_bool(&mut self, val: bool) -> Result<(), ArrowError> {
-    match self.data {
-      BuilderData::Bool { ref mut data } => {
-
-      },
-      _ => panic!()
-    };
-
     match self.reserve(1) {
       Ok(_) => {
         match self.data {
@@ -176,6 +169,23 @@ impl ArrayBuilder {
             } else {
               bit_util::clear_bit(data.data_as_mut(), self.length);
             }
+            self.length = self.length + 1;
+            Ok(())
+          },
+          _ => panic!()
+        }
+      },
+      Err(e) => Err(e)
+    }
+  }
+
+  pub fn append_int8(&mut self, val: i8) -> Result<(), ArrowError> {
+    match self.reserve(1) {
+      Ok(_) => {
+        match self.data {
+          BuilderData::Int8 { ref mut data } => {
+            bit_util::set_bit(self.null_bitmap.data_as_mut(), self.length);
+            unsafe { *(mem::transmute::<*mut u8, *mut i8>(data.data_as_mut()).offset(self.length as isize)) = val }
             self.length = self.length + 1;
             Ok(())
           },
@@ -200,7 +210,7 @@ impl ArrayBuilder {
       BuilderData::Null => Array::null(self.length, 0),
 
       // primitive types
-      // TODO: null_bitmap should be able to be passed without clone
+      // TODO: null_bitmap should be able to be passed without clone because PoolBuffer.clone() is deep copy
       BuilderData::Bool      { ref data } |
       BuilderData::Int8      { ref data } |
       BuilderData::Int16     { ref data } |
@@ -336,51 +346,36 @@ enum BuilderData {
 impl BuilderData {
   fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
     match self {
-      &mut BuilderData::Bool { ref mut data } => {
-        init_buffer(data, capacity)
-      },
-      _ => Ok(())
+      &mut BuilderData::Null => Ok(()),
+      &mut BuilderData::Bool { ref mut data } => init_buffer(data, capacity),
+      &mut BuilderData::Int8 { ref mut data } => init_buffer(data, capacity * 8),
+      _ => panic!()
     }
   }
 
   fn resize(&mut self, capacity: i64) -> Result<(), ArrowError> {
     match self {
-      &mut BuilderData::Bool { ref mut data } => {
-        resize_buffer(data, capacity)
-      },
-      _ => Ok(())
+      &mut BuilderData::Null => Ok(()),
+      &mut BuilderData::Bool { ref mut data } => resize_buffer(data, capacity),
+      &mut BuilderData::Int8 { ref mut data } => resize_buffer(data, capacity * 8),
+      _ => panic!()
     }
   }
 }
 
-fn init_buffer(buffer: &mut PoolBuffer, capacity: i64) -> Result<(), ArrowError> {
-  let nbytes = bit_util::bytes_for_bits(capacity);
-  match buffer.resize(nbytes) {
-    Ok(_) => {
-      buffer.clear(0, nbytes);
-      Ok(())
-    },
-    Err(e) => Err(e)
-  }
+fn init_buffer(buffer: &mut PoolBuffer, new_bits: i64) -> Result<(), ArrowError> {
+  let nbytes = bit_util::bytes_for_bits(new_bits);
+  buffer.resize(nbytes)
 }
 
-fn resize_buffer(buffer: &mut PoolBuffer, capacity: i64) -> Result<(), ArrowError> {
+fn resize_buffer(buffer: &mut PoolBuffer, new_bits: i64) -> Result<(), ArrowError> {
   let old_bytes = buffer.size();
-  let new_bytes = bit_util::bytes_for_bits(capacity);
+  let new_bytes = bit_util::bytes_for_bits(new_bits);
 
   if old_bytes == new_bytes {
     Ok(())
   } else {
-    match buffer.resize(new_bytes) {
-      Ok(_) => {
-        let new_capacity = buffer.capacity();
-        if old_bytes < new_bytes {
-          buffer.clear(old_bytes, new_capacity - old_bytes);
-        }
-        Ok(())
-      },
-      Err(e) => Err(e)
-    }
+    buffer.resize(new_bytes)
   }
 }
 
@@ -420,7 +415,7 @@ mod tests {
   #[test]
   fn test_bool_builder() {
     use rand;
-    use array::PrimitiveArray;
+    use array::BooleanArray;
 
     let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
     let null_bitmap = PoolBuffer::new(pool.clone());
@@ -434,19 +429,54 @@ mod tests {
       expected.push(val);
     }
 
-//    assert_eq!(100, builder.len());
-//    assert_eq!(128, builder.capacity());
-//    assert_eq!(0, builder.null_count());
-//
-//    let array = builder.finish().unwrap();
-//
-//    assert_eq!(&Ty::Bool, array.ty());
-//    assert_eq!(100, array.len());
-//    assert_eq!(0, array.null_count());
-//    assert_eq!(0, array.offset());
+    assert_eq!(100, builder.len());
+    assert_eq!(32, builder.capacity());
+    assert_eq!(0, builder.null_count());
 
-//    for i in 0..100 {
-//      assert_eq!(expected[i], array.prim_value(i as i64));
-//    }
+    let array = builder.finish().unwrap();
+
+    assert_eq!(&Ty::Bool, array.ty());
+    assert_eq!(100, array.len());
+    assert_eq!(0, array.null_count());
+    assert_eq!(0, array.offset());
+
+    for i in 0..100 {
+      assert_eq!(expected[i], array.bool_value(i as i64));
+    }
+  }
+
+  // TODO: test boolean with null
+
+  #[test]
+  fn test_int8_builder() {
+    use rand;
+    use array::PrimitiveArray;
+
+    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
+    let null_bitmap = PoolBuffer::new(pool.clone());
+    let data = PoolBuffer::new(pool.clone());
+
+    let mut builder = ArrayBuilder::new(Ty::Int8, null_bitmap, data);
+    let mut expected: Vec<i8> = Vec::new();
+    for i in 0..100 {
+      let val = rand::random::<i8>();
+      builder.append_int8(val);
+      expected.push(val);
+    }
+
+    assert_eq!(100, builder.len());
+    assert_eq!(128, builder.capacity());
+    assert_eq!(0, builder.null_count());
+
+    let array = builder.finish().unwrap();
+
+    assert_eq!(&Ty::Int8, array.ty());
+    assert_eq!(100, array.len());
+    assert_eq!(0, array.null_count());
+    assert_eq!(0, array.offset());
+
+    for i in 0..100 {
+      assert_eq!(expected[i], array.prim_value(i as i64));
+    }
   }
 }

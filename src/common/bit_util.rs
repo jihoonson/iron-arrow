@@ -68,7 +68,7 @@ pub fn set_bit(bits: *mut u8, i: i64) {
 #[inline]
 pub fn clear_bit(bits: *mut u8, i: i64) {
   unsafe {
-    *bits.offset(i as isize / 8) = FLIPPED_BITMASK[i as usize % 8];
+    *bits.offset(i as isize / 8) = *bits.offset(i as isize / 8) & FLIPPED_BITMASK[i as usize % 8];
   }
 }
 
@@ -124,25 +124,25 @@ mod test {
   fn test_set_get_bit() {
     use common::bit_util::{set_bit, get_bit};
 
+    // TODO: this test sometimes fails
+
     let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
     let mut buffer = PoolBuffer::new(pool.clone());
     buffer.reserve(100);
 
-    let mut data = buffer.data_as_mut();
     let mut true_indexes: Vec<i64> = Vec::new();
     let mut i = 0;
     while i < 100 {
-      set_bit(data, i);
+      set_bit(buffer.data_as_mut(), i);
       true_indexes.push(i);
       i = i * 2 + 1;
     }
 
-    let data = buffer.data();
     for i in 0..100 {
       if true_indexes.contains(&i) {
-        assert!(get_bit(data, i));
+        assert!(get_bit(buffer.data(), i));
       } else {
-        assert_eq!(false, get_bit(data, i));
+        assert_eq!(false, get_bit(buffer.data(), i));
       }
     }
   }
@@ -160,6 +160,9 @@ mod test {
     set_bit(data, 2);
     assert!(get_bit(data, 2));
     clear_bit(data, 2);
+    assert_eq!(false, get_bit(data, 2));
+
+    set_bit(data, 3);
     assert_eq!(false, get_bit(data, 2));
   }
 

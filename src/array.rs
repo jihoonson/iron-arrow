@@ -23,7 +23,7 @@ pub struct Array {
 pub enum ArrayData {
   Null,
   Bool {
-    values: Vec<bool>
+    values: *const u8
   },
 
   UInt8 {
@@ -158,7 +158,7 @@ impl Array {
   pub fn fixed_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer) -> Array {
     let data = match ty {
       Ty::NA => ArrayData::Null,
-      Ty::Bool => ArrayData::Bool { values: values.as_vec() },
+      Ty::Bool => ArrayData::Bool { values: values.data() },
 
       Ty::Int8 => ArrayData::Int8 { values: values.as_vec() },
       Ty::Int16 => ArrayData::Int16 { values: values.as_vec() },
@@ -310,27 +310,24 @@ fn raw_values<T>(value_buffer: &Option<PoolBuffer>, offset: i64) -> *const T {
 }
 
 // TODO: maybe need cast?
+
+pub trait BooleanArray {
+  fn bool_value(&self, i: i64) -> bool;
+}
+
+impl BooleanArray for Array {
+  fn bool_value(&self, i: i64) -> bool {
+    match self.data() {
+      &ArrayData::Bool { ref values } => bit_util::get_bit(*values, i),
+      _ => panic!("{:?} is not a boolean array", self.ty())
+    }
+  }
+}
+
 pub trait PrimitiveArray<T: Copy> {
   fn prim_value(&self, i: i64) -> T;
 
   fn prim_values(&self) -> &[T];
-//  fn values(&self) -> *const T;
-}
-
-impl PrimitiveArray<bool> for Array {
-  fn prim_value(&self, i: i64) -> bool {
-    match self.data() {
-      &ArrayData::Bool { ref values } => values[i as usize],
-      _ => panic!("{:?} is not a boolean array", self.ty())
-    }
-  }
-
-  fn prim_values(&self) -> &[bool] {
-    match self.data() {
-      &ArrayData::Bool { ref values } => values.as_slice(),
-      _ => panic!("{:?} is not a boolean array", self.ty())
-    }
-  }
 }
 
 macro_rules! impl_primitive_array {

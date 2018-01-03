@@ -76,7 +76,6 @@ fn as_mut<T>(p: *const u8) -> *mut T {
 // Eq, PartialEq
 // Copy?
 
-#[derive(Clone)]
 pub struct PoolBuffer {
   pool: Arc<RefCell<MemoryPool>>,
   page: *const u8,
@@ -122,14 +121,31 @@ impl PoolBuffer {
     self.page
   }
 
-  pub fn clear(&self, offset: i64, len: i64) {
-    if self.capacity > 0 {
-      unsafe { libc::memset(mem::transmute::<*const u8, *mut libc::c_void>(self.page.offset(offset as isize)), 0, len as libc::size_t); }
-    }
-  }
-
   pub fn as_vec<T>(&self) -> Vec<T> {
-    unsafe { Vec::from_raw_parts(as_mut(self.page), self.size as usize, self.capacity as usize) }
+    let v = unsafe { Vec::from_raw_parts(as_mut(self.page), self.size as usize, self.capacity as usize) };
+    v
+  }
+}
+
+// TODO: remove this
+impl Clone for PoolBuffer {
+  fn clone(&self) -> Self {
+    let mut new_buf = PoolBuffer::new(self.pool.clone());
+    match new_buf.resize(self.size) {
+      Ok(_) => {
+        assert_eq!(self.size, new_buf.size);
+        assert_eq!(self.capacity, new_buf.capacity);
+        unsafe {
+          libc::memcpy(
+            mem::transmute::<*const u8, *mut libc::c_void>(new_buf.page),
+            mem::transmute::<*const u8, *const libc::c_void>(self.page),
+            self.capacity as usize
+          );
+        }
+        new_buf
+      },
+      Err(e) => panic!("Error [{}] while cloning", e.message())
+    }
   }
 }
 
@@ -183,6 +199,7 @@ impl Drop for PoolBuffer {
   fn drop(&mut self) {
     if self.capacity > 0 {
       self.pool.borrow_mut().free(self.page, self.capacity);
+      println!("drop");
     }
   }
 }
