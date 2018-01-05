@@ -121,6 +121,7 @@ impl PoolBuffer {
     self.page
   }
 
+  // TODO: fix this
   pub fn as_vec<T>(&self) -> Vec<T> {
     let v = unsafe { Vec::from_raw_parts(as_mut(self.page), self.size as usize, self.capacity as usize) };
     v
@@ -199,7 +200,6 @@ impl Drop for PoolBuffer {
   fn drop(&mut self) {
     if self.capacity > 0 {
       self.pool.borrow_mut().free(self.page, self.capacity);
-      println!("drop");
     }
   }
 }

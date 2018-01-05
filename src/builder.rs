@@ -196,6 +196,23 @@ impl ArrayBuilder {
     }
   }
 
+  pub fn append_uint8(&mut self, val: u8) -> Result<(), ArrowError> {
+    match self.reserve(1) {
+      Ok(_) => {
+        match self.data {
+          BuilderData::UInt8 { ref mut data } => {
+            bit_util::set_bit(self.null_bitmap.data_as_mut(), self.length);
+            unsafe { *data.data_as_mut().offset(self.length as isize) = val }
+            self.length = self.length + 1;
+            Ok(())
+          },
+          _ => panic!()
+        }
+      },
+      Err(e) => Err(e)
+    }
+  }
+
   fn unsafe_append_to_bitmap(&mut self, is_valid: bool) {
     if is_valid {
       bit_util::set_bit(self.null_bitmap.data_as_mut(), self.length);
@@ -233,7 +250,7 @@ impl ArrayBuilder {
         self.length,
         0,
         Some(self.null_bitmap.clone()),
-        data
+        data.clone()
       ),
 
       // fixed size binary types
@@ -243,7 +260,7 @@ impl ArrayBuilder {
         self.length,
         0,
         Some(self.null_bitmap.clone()),
-        data
+        data.clone()
       ),
 
       _ => panic!()
@@ -348,7 +365,10 @@ impl BuilderData {
     match self {
       &mut BuilderData::Null => Ok(()),
       &mut BuilderData::Bool { ref mut data } => init_buffer(data, capacity),
-      &mut BuilderData::Int8 { ref mut data } => init_buffer(data, capacity * 8),
+      &mut BuilderData::Int8 { ref mut data } |
+      &mut BuilderData::UInt8 { ref mut data } => init_buffer(data, capacity * 8),
+      &mut BuilderData::Int16 { ref mut data } |
+      &mut BuilderData::UInt16 { ref mut data } => init_buffer(data, capacity * 16),
       _ => panic!()
     }
   }
@@ -357,7 +377,10 @@ impl BuilderData {
     match self {
       &mut BuilderData::Null => Ok(()),
       &mut BuilderData::Bool { ref mut data } => resize_buffer(data, capacity),
-      &mut BuilderData::Int8 { ref mut data } => resize_buffer(data, capacity * 8),
+      &mut BuilderData::Int8 { ref mut data } |
+      &mut BuilderData::UInt8 { ref mut data } => resize_buffer(data, capacity * 8),
+      &mut BuilderData::Int16 { ref mut data } |
+      &mut BuilderData::UInt16 { ref mut data } => resize_buffer(data, capacity * 16),
       _ => panic!()
     }
   }
@@ -447,36 +470,43 @@ mod tests {
 
   // TODO: test boolean with null
 
-  #[test]
-  fn test_int8_builder() {
-    use rand;
-    use array::PrimitiveArray;
+  macro_rules! test_primitive_type_builder {
+      ($test_name: ident, $ty: path, $prim_ty: ty, $append_method: ident, $expected_capacity: expr) => {
+        #[test]
+        fn $test_name() {
+          use rand;
+          use array::PrimitiveArray;
 
-    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
-    let null_bitmap = PoolBuffer::new(pool.clone());
-    let data = PoolBuffer::new(pool.clone());
+          let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
+          let null_bitmap = PoolBuffer::new(pool.clone());
+          let data = PoolBuffer::new(pool.clone());
 
-    let mut builder = ArrayBuilder::new(Ty::Int8, null_bitmap, data);
-    let mut expected: Vec<i8> = Vec::new();
-    for i in 0..100 {
-      let val = rand::random::<i8>();
-      builder.append_int8(val);
-      expected.push(val);
-    }
+          let mut builder = ArrayBuilder::new($ty, null_bitmap, data);
+          let mut expected: Vec<$prim_ty> = Vec::new();
+          for i in 0..100 {
+            let val = rand::random::<$prim_ty>();
+            builder.$append_method(val);
+            expected.push(val);
+          }
 
-    assert_eq!(100, builder.len());
-    assert_eq!(128, builder.capacity());
-    assert_eq!(0, builder.null_count());
+          assert_eq!(100, builder.len());
+          assert_eq!($expected_capacity, builder.capacity());
+          assert_eq!(0, builder.null_count());
 
-    let array = builder.finish().unwrap();
+          let array = builder.finish().unwrap();
 
-    assert_eq!(&Ty::Int8, array.ty());
-    assert_eq!(100, array.len());
-    assert_eq!(0, array.null_count());
-    assert_eq!(0, array.offset());
+          assert_eq!(&$ty, array.ty());
+          assert_eq!(100, array.len());
+          assert_eq!(0, array.null_count());
+          assert_eq!(0, array.offset());
 
-    for i in 0..100 {
-      assert_eq!(expected[i], array.prim_value(i as i64));
-    }
+          for i in 0..100 {
+            assert_eq!(expected[i], array.prim_value(i as i64));
+          }
+        }
+      };
   }
+
+  test_primitive_type_builder!(test_int8_builder, Ty::Int8, i8, append_int8, 128);
+  test_primitive_type_builder!(test_uint8_builder, Ty::UInt8, u8, append_uint8, 128);
 }

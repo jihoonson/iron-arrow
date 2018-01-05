@@ -39,6 +39,7 @@ impl MemoryPool for DefaultMemoryPool {
   fn allocate(&mut self, size: i64) -> Result<*const u8, ArrowError> {
     match allocate_aligned(size) {
       Ok(page) => {
+        println!("allocated memory of {} at {:?}", size, page);
         self.bytes_allocated.fetch_add(size, Ordering::Relaxed);
 
         let _locked = self.lock.lock().unwrap();
@@ -93,6 +94,7 @@ impl MemoryPool for DefaultMemoryPool {
     if self.bytes_allocated() < size {
       panic!("allocated bytes[{}] is less than free size[{}]", self.bytes_allocated(), size);
     } else {
+//      println!("try freeing memory of {} from {:?}", size, page);
       unsafe {
         libc::free(mem::transmute::<*const u8, *mut libc::c_void>(page));
         self.bytes_allocated.fetch_sub(size, Ordering::Relaxed);
@@ -115,6 +117,7 @@ fn allocate_aligned(size: i64) -> Result<*const u8, ArrowError> {
   unsafe {
     let mut page: *mut libc::c_void = mem::uninitialized();
     let result = libc::posix_memalign(&mut page, ALIGNMENT, size as usize);
+//    println!("allocated aligned memory of {} at {:?}", size, page);
     match result {
       libc::ENOMEM => Err(ArrowError::out_of_memory(format!("malloc of size {} failed", size))),
       libc::EINVAL => Err(ArrowError::invalid(format!("invalid alignment parameter: {}", ALIGNMENT))),

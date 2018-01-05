@@ -27,38 +27,38 @@ pub enum ArrayData {
   },
 
   UInt8 {
-    values: Vec<u8>
+    values: *const u8
   },
   Int8 {
-    values: Vec<i8>
+    values: *const i8
   },
   UInt16 {
-    values: Vec<u16>
+    values: *const u16
   },
   Int16 {
-    values: Vec<i16>
+    values: *const i16
   },
   UInt32 {
-    values: Vec<u32>
+    values: *const u32
   },
   Int32 {
-    values: Vec<i32>
+    values: *const i32
   },
   UInt64 {
-    values: Vec<u64>
+    values: *const u64
   },
   Int64 {
-    values: Vec<i64>
+    values: *const i64
   },
 
   HalfFloat {
-    values: Vec<u16>
+    values: *const u16
   },
   Float {
-    values: Vec<f32>
+    values: *const f32
   },
   Double {
-    values: Vec<f64>
+    values: *const f64
   },
 
   Binary {
@@ -74,22 +74,22 @@ pub enum ArrayData {
   },
 
   Date64 {
-    values: Vec<i64>
+    values: *const i64
   },
   Date32 {
-    values: Vec<i32>
+    values: *const i32
   },
   Timestamp {
-    values: Vec<i64>
+    values: *const i64
   },
   Time32 {
-    values: Vec<i32>
+    values: *const i32
   },
   Time64 {
-    values: Vec<i64>
+    values: *const i64
   },
   Interval {
-    values: Vec<i64>
+    values: *const i64
   },
 
   Decimal {
@@ -140,7 +140,7 @@ impl Array {
     }
   }
 
-  pub fn primitive(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer) -> Array {
+  pub fn primitive(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
     Array::fixed_width(ty, length, offset, null_bitmap, values)
   }
 
@@ -155,30 +155,30 @@ impl Array {
     }
   }
 
-  pub fn fixed_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer) -> Array {
+  pub fn fixed_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
     let data = match ty {
       Ty::NA => ArrayData::Null,
       Ty::Bool => ArrayData::Bool { values: values.data() },
 
-      Ty::Int8 => ArrayData::Int8 { values: values.as_vec() },
-      Ty::Int16 => ArrayData::Int16 { values: values.as_vec() },
-      Ty::Int32 => ArrayData::Int32 { values: values.as_vec() },
-      Ty::Int64 => ArrayData::Int64 { values: values.as_vec() },
-      Ty::UInt8 => ArrayData::UInt8 { values: values.as_vec() },
-      Ty::UInt16 => ArrayData::UInt16 { values: values.as_vec() },
-      Ty::UInt32 => ArrayData::UInt32 { values: values.as_vec() },
-      Ty::UInt64 => ArrayData::UInt64 { values: values.as_vec() },
+      Ty::Int8 => ArrayData::Int8 { values: unsafe { mem::transmute::<*const u8, *const i8>(values.data()) } },
+      Ty::Int16 => ArrayData::Int16 { values: unsafe { mem::transmute::<*const u8, *const i16>(values.data()) } },
+      Ty::Int32 => ArrayData::Int32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
+      Ty::Int64 => ArrayData::Int64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+      Ty::UInt8 => ArrayData::UInt8 { values: values.data() },
+      Ty::UInt16 => ArrayData::UInt16 { values: unsafe { mem::transmute::<*const u8, *const u16>(values.data()) } },
+      Ty::UInt32 => ArrayData::UInt32 { values: unsafe { mem::transmute::<*const u8, *const u32>(values.data()) } },
+      Ty::UInt64 => ArrayData::UInt64 { values: unsafe { mem::transmute::<*const u8, *const u64>(values.data()) } },
 
-      Ty::HalfFloat => ArrayData::HalfFloat { values: values.as_vec() },
-      Ty::Float => ArrayData::Float { values: values.as_vec() },
-      Ty::Double => ArrayData::Double { values: values.as_vec() },
+      Ty::HalfFloat => ArrayData::HalfFloat { values: unsafe { mem::transmute::<*const u8, *const u16>(values.data()) } },
+      Ty::Float => ArrayData::Float { values: unsafe { mem::transmute::<*const u8, *const f32>(values.data()) } },
+      Ty::Double => ArrayData::Double { values: unsafe { mem::transmute::<*const u8, *const f64>(values.data()) } },
 
-      Ty::Date64 { unit: ref _unit } => ArrayData::Date64 { values: values.as_vec() },
-      Ty::Date32 { unit: ref _unit } => ArrayData::Date32 { values: values.as_vec() },
-      Ty::Time64 { unit: ref _unit } => ArrayData::Time64 { values: values.as_vec() },
-      Ty::Time32 { unit: ref _unit } => ArrayData::Time32 { values: values.as_vec() },
-      Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => ArrayData::Timestamp { values: values.as_vec() },
-      Ty::Interval { unit: ref _unit } => ArrayData::Interval { values: values.as_vec() },
+      Ty::Date64 { unit: ref _unit } => ArrayData::Date64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+      Ty::Date32 { unit: ref _unit } => ArrayData::Date32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
+      Ty::Time64 { unit: ref _unit } => ArrayData::Time64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+      Ty::Time32 { unit: ref _unit } => ArrayData::Time32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
+      Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => ArrayData::Timestamp { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+      Ty::Interval { unit: ref _unit } => ArrayData::Interval { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
 
       Ty::FixedSizeBinary { byte_width } => ArrayData::FixedSizeBinary { values: values.data() },
       Ty::Decimal { precision: _precision, scale: _scale } => ArrayData::Decimal { values: values.data() },
@@ -327,7 +327,7 @@ impl BooleanArray for Array {
 pub trait PrimitiveArray<T: Copy> {
   fn prim_value(&self, i: i64) -> T;
 
-  fn prim_values(&self) -> &[T];
+//  fn prim_values(&self) -> &[T]; TODO: support this after PoolBuffer.as_vec() is fixed
 }
 
 macro_rules! impl_primitive_array {
@@ -335,17 +335,18 @@ macro_rules! impl_primitive_array {
       impl PrimitiveArray<$prim_ty> for Array {
         fn prim_value(&self, i: i64) -> $prim_ty {
           match self.data() {
-            &$ty { ref values } => values[i as usize],
+//            &$ty { ref values } => values[i as usize],
+              &$ty { ref values } => unsafe { *values.offset(i as isize) },
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
 
-        fn prim_values(&self) -> &[$prim_ty] {
-          match self.data() {
-            &$ty { ref values } => values.as_slice(),
-            _ => panic!("{:?} is not a boolean array", self.ty())
-          }
-        }
+//        fn prim_values(&self) -> &[$prim_ty] {
+//          match self.data() {
+//            &$ty { ref values } => values.as_slice(),
+//            _ => panic!("{:?} is not a boolean array", self.ty())
+//          }
+//        }
       }
     };
 
@@ -353,17 +354,18 @@ macro_rules! impl_primitive_array {
       impl PrimitiveArray<$prim_ty> for Array {
         fn prim_value(&self, i: i64) -> $prim_ty {
           match self.data() {
-            &$ty1 { ref values } | &$ty2 { ref values } => values[i as usize],
+//            &$ty1 { ref values } | &$ty2 { ref values } => values[i as usize],
+              &$ty1 { ref values } | &$ty2 { ref values } => unsafe { *values.offset(i as isize) },
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
 
-        fn prim_values(&self) -> &[$prim_ty] {
-          match self.data() {
-            &$ty1 { ref values } | &$ty2 { ref values } => values.as_slice(),
-            _ => panic!("{:?} is not a boolean array", self.ty())
-          }
-        }
+//        fn prim_values(&self) -> &[$prim_ty] {
+//          match self.data() {
+//            &$ty1 { ref values } | &$ty2 { ref values } => values.as_slice(),
+//            _ => panic!("{:?} is not a boolean array", self.ty())
+//          }
+//        }
       }
     };
 
@@ -371,17 +373,18 @@ macro_rules! impl_primitive_array {
       impl PrimitiveArray<$prim_ty> for Array {
         fn prim_value(&self, i: i64) -> $prim_ty {
           match self.data() {
-            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } => values[i as usize],
+//            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } => values[i as usize],
+              &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } => unsafe { *values.offset(i as isize) },
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
 
-        fn prim_values(&self) -> &[$prim_ty] {
-          match self.data() {
-            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } => values.as_slice(),
-            _ => panic!("{:?} is not a boolean array", self.ty())
-          }
-        }
+//        fn prim_values(&self) -> &[$prim_ty] {
+//          match self.data() {
+//            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } => values.as_slice(),
+//            _ => panic!("{:?} is not a boolean array", self.ty())
+//          }
+//        }
       }
     };
 
@@ -389,17 +392,18 @@ macro_rules! impl_primitive_array {
       impl PrimitiveArray<$prim_ty> for Array {
         fn prim_value(&self, i: i64) -> $prim_ty {
           match self.data() {
-            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } | &$ty4 { ref values } | &$ty5 { ref values } => values[i as usize],
+//            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } | &$ty4 { ref values } | &$ty5 { ref values } => values[i as usize],
+            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } | &$ty4 { ref values } | &$ty5 { ref values } => unsafe { *values.offset(i as isize) },
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
 
-        fn prim_values(&self) -> &[$prim_ty] {
-          match self.data() {
-            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } | &$ty4 { ref values } | &$ty5 { ref values } => values.as_slice(),
-            _ => panic!("{:?} is not a boolean array", self.ty())
-          }
-        }
+//        fn prim_values(&self) -> &[$prim_ty] {
+//          match self.data() {
+//            &$ty1 { ref values } | &$ty2 { ref values } | &$ty3 { ref values } | &$ty4 { ref values } | &$ty5 { ref values } => values.as_slice(),
+//            _ => panic!("{:?} is not a boolean array", self.ty())
+//          }
+//        }
       }
     };
 }
