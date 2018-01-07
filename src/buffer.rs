@@ -124,8 +124,19 @@ impl PoolBuffer {
   // TODO: fix this
   pub fn as_vec<T>(&self) -> Vec<T> {
     let v = unsafe { Vec::from_raw_parts(as_mut(self.page), self.size as usize, self.capacity as usize) };
+    unsafe { mem::forget(self.page) }
     v
   }
+
+  pub fn forget(&self) {
+    unsafe { mem::forget(self.page) }
+  }
+
+//  pub fn as_slice<T>(&self) -> &[T] {
+//    use std::slice;
+//
+//    unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const T>(self.page), self.size as usize) }
+//  }
 }
 
 // TODO: remove this

@@ -4,6 +4,7 @@ use common::ty;
 use common::ty::Ty;
 use memory_pool::MemoryPool;
 use buffer::{Buffer, PoolBuffer};
+use builder::ArrayBuilder;
 
 use std::ptr;
 use std::mem;
@@ -11,120 +12,123 @@ use std::mem;
 use std::fmt::{Debug, Formatter, Error};
 
 #[derive(Eq, PartialEq)]
-pub struct Array {
-  ty: Ty,
-  length: i64,
-  offset: i64,
-  null_count: i64,
-  null_bitmap: Option<PoolBuffer>,
-  data: ArrayData
+pub struct Array<'a> {
+//  ty: Ty,
+//  length: i64,
+//  offset: i64,
+//  null_count: i64,
+//  null_bitmap: Option<PoolBuffer>,
+//  data: ArrayData
+
+  builder: ArrayBuilder<'a>
 }
 
-pub enum ArrayData {
-  Null,
-  Bool {
-    values: *const u8
-  },
+//pub enum ArrayData {
+//  Null,
+//  Bool {
+//    values: *const u8
+//  },
+//
+//  UInt8 {
+////    values: *const u8
+//    values: Vec<u8>
+//  },
+//  Int8 {
+//    values: *const i8
+//  },
+//  UInt16 {
+//    values: *const u16
+//  },
+//  Int16 {
+//    values: *const i16
+//  },
+//  UInt32 {
+//    values: *const u32
+//  },
+//  Int32 {
+//    values: *const i32
+//  },
+//  UInt64 {
+//    values: *const u64
+//  },
+//  Int64 {
+//    values: *const i64
+//  },
+//
+//  HalfFloat {
+//    values: *const u16
+//  },
+//  Float {
+//    values: *const f32
+//  },
+//  Double {
+//    values: *const f64
+//  },
+//
+//  Binary {
+//    value_offsets: *const i32, // TODO => maybe Vec<i32>,
+//    values: *const u8
+//  },
+//  String {
+//    value_offsets: *const i32,
+//    values: *const u8
+//  },
+//  FixedSizeBinary {
+//    values: *const u8
+//  },
+//
+//  Date64 {
+//    values: *const i64
+//  },
+//  Date32 {
+//    values: *const i32
+//  },
+//  Timestamp {
+//    values: *const i64
+//  },
+//  Time32 {
+//    values: *const i32
+//  },
+//  Time64 {
+//    values: *const i64
+//  },
+//  Interval {
+//    values: *const i64
+//  },
+//
+//  Decimal {
+//    values: *const u8
+//  },
+//
+//  List {
+//    value_offsets: *const i32,
+//    value_array: Box<Array>
+//  },
+//  Struct {
+//    fields: Vec<Box<Array>>
+//  },
+//  Union {
+//    fields: Vec<Box<Array>>,
+//    value_offsets: *const i32
+//  },
+//
+//  Dictionary {
+//    indices: Box<Array>
+//  }
+//}
 
-  UInt8 {
-    values: *const u8
-  },
-  Int8 {
-    values: *const i8
-  },
-  UInt16 {
-    values: *const u16
-  },
-  Int16 {
-    values: *const i16
-  },
-  UInt32 {
-    values: *const u32
-  },
-  Int32 {
-    values: *const i32
-  },
-  UInt64 {
-    values: *const u64
-  },
-  Int64 {
-    values: *const i64
-  },
+//impl PartialEq for ArrayData {
+//  fn eq(&self, other: &Self) -> bool {
+//    // TODO
+//    unimplemented!()
+//  }
+//}
+//
+//impl Eq for ArrayData {
+//
+//}
 
-  HalfFloat {
-    values: *const u16
-  },
-  Float {
-    values: *const f32
-  },
-  Double {
-    values: *const f64
-  },
-
-  Binary {
-    value_offsets: *const i32, // TODO => maybe Vec<i32>,
-    values: *const u8
-  },
-  String {
-    value_offsets: *const i32,
-    values: *const u8
-  },
-  FixedSizeBinary {
-    values: *const u8
-  },
-
-  Date64 {
-    values: *const i64
-  },
-  Date32 {
-    values: *const i32
-  },
-  Timestamp {
-    values: *const i64
-  },
-  Time32 {
-    values: *const i32
-  },
-  Time64 {
-    values: *const i64
-  },
-  Interval {
-    values: *const i64
-  },
-
-  Decimal {
-    values: *const u8
-  },
-
-  List {
-    value_offsets: *const i32,
-    value_array: Box<Array>
-  },
-  Struct {
-    fields: Vec<Box<Array>>
-  },
-  Union {
-    fields: Vec<Box<Array>>,
-    value_offsets: *const i32
-  },
-
-  Dictionary {
-    indices: Box<Array>
-  }
-}
-
-impl PartialEq for ArrayData {
-  fn eq(&self, other: &Self) -> bool {
-    // TODO
-    unimplemented!()
-  }
-}
-
-impl Eq for ArrayData {
-
-}
-
-impl Array {
+impl <'a> Array<'a> {
   #[inline]
   fn compute_null_count(null_bitmap: &Option<PoolBuffer>, offset: i64, length: i64) -> i64 {
     match null_bitmap {
@@ -140,93 +144,96 @@ impl Array {
     }
   }
 
-  pub fn primitive(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
-    Array::fixed_width(ty, length, offset, null_bitmap, values)
-  }
+//  pub fn null(length: i64, offset: i64) -> Array {
+//    Array {
+//      ty: Ty::null(),
+//      length,
+//      offset,
+//      null_count: length,
+//      null_bitmap: None,
+//      data: ArrayData::Null
+//    }
+//  }
+//
+//  pub fn fixed_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer) -> Array {
+//    let data = match ty {
+//      Ty::NA => ArrayData::Null,
+//      Ty::Bool => ArrayData::Bool { values: values.data() },
+//
+//      Ty::Int8 => ArrayData::Int8 { values: unsafe { mem::transmute::<*const u8, *const i8>(values.data()) } },
+//      Ty::Int16 => ArrayData::Int16 { values: unsafe { mem::transmute::<*const u8, *const i16>(values.data()) } },
+//      Ty::Int32 => ArrayData::Int32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
+//      Ty::Int64 => ArrayData::Int64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+////      Ty::UInt8 => ArrayData::UInt8 { values: values.data() },
+//      Ty::UInt8 => ArrayData::UInt8 { values: values.as_vec() },
+//      Ty::UInt16 => ArrayData::UInt16 { values: unsafe { mem::transmute::<*const u8, *const u16>(values.data()) } },
+//      Ty::UInt32 => ArrayData::UInt32 { values: unsafe { mem::transmute::<*const u8, *const u32>(values.data()) } },
+//      Ty::UInt64 => ArrayData::UInt64 { values: unsafe { mem::transmute::<*const u8, *const u64>(values.data()) } },
+//
+//      Ty::HalfFloat => ArrayData::HalfFloat { values: unsafe { mem::transmute::<*const u8, *const u16>(values.data()) } },
+//      Ty::Float => ArrayData::Float { values: unsafe { mem::transmute::<*const u8, *const f32>(values.data()) } },
+//      Ty::Double => ArrayData::Double { values: unsafe { mem::transmute::<*const u8, *const f64>(values.data()) } },
+//
+//      Ty::Date64 { unit: ref _unit } => ArrayData::Date64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+//      Ty::Date32 { unit: ref _unit } => ArrayData::Date32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
+//      Ty::Time64 { unit: ref _unit } => ArrayData::Time64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+//      Ty::Time32 { unit: ref _unit } => ArrayData::Time32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
+//      Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => ArrayData::Timestamp { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+//      Ty::Interval { unit: ref _unit } => ArrayData::Interval { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
+//
+//      Ty::FixedSizeBinary { byte_width } => ArrayData::FixedSizeBinary { values: values.data() },
+//      Ty::Decimal { precision: _precision, scale: _scale } => ArrayData::Decimal { values: values.data() },
+//
+//      _ => panic!("[{:?}] is not supported type", ty)
+//    };
+//
+//    Array {
+//      ty,
+//      length,
+//      offset,
+//      null_count: Array::compute_null_count(&null_bitmap, offset, length),
+//      null_bitmap,
+//      data,
+//    }
+//  }
+//
+//  pub fn variable_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer, value_offsets: &PoolBuffer) -> Array {
+//    let data = match ty {
+//      Ty::Binary => ArrayData::Binary {
+//        value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) },
+//        values: values.data()
+//      },
+//      _ => panic!()
+//    };
+//
+//    Array {
+//      ty,
+//      length,
+//      offset,
+//      null_count: Array::compute_null_count(&null_bitmap, offset, length),
+//      null_bitmap,
+//      data
+//    }
+//  }
+//
+//  pub fn list(value_type: Box<Ty>, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, value_array: Array, value_offsets: &PoolBuffer) -> Array {
+//    let data = ArrayData::List {
+//      value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) },
+//      value_array: Box::new(value_array)
+//    };
+//    Array {
+//      ty: Ty::list(value_type),
+//      length,
+//      offset,
+//      null_count: Array::compute_null_count(&null_bitmap, offset, length),
+//      null_bitmap,
+//      data
+//    }
+//  }
 
-  pub fn null(length: i64, offset: i64) -> Array {
+  pub fn new(builder: ArrayBuilder<'a>) -> Array<'a> {
     Array {
-      ty: Ty::null(),
-      length,
-      offset,
-      null_count: length,
-      null_bitmap: None,
-      data: ArrayData::Null
-    }
-  }
-
-  pub fn fixed_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: PoolBuffer) -> Array {
-    let data = match ty {
-      Ty::NA => ArrayData::Null,
-      Ty::Bool => ArrayData::Bool { values: values.data() },
-
-      Ty::Int8 => ArrayData::Int8 { values: unsafe { mem::transmute::<*const u8, *const i8>(values.data()) } },
-      Ty::Int16 => ArrayData::Int16 { values: unsafe { mem::transmute::<*const u8, *const i16>(values.data()) } },
-      Ty::Int32 => ArrayData::Int32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
-      Ty::Int64 => ArrayData::Int64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-      Ty::UInt8 => ArrayData::UInt8 { values: values.data() },
-      Ty::UInt16 => ArrayData::UInt16 { values: unsafe { mem::transmute::<*const u8, *const u16>(values.data()) } },
-      Ty::UInt32 => ArrayData::UInt32 { values: unsafe { mem::transmute::<*const u8, *const u32>(values.data()) } },
-      Ty::UInt64 => ArrayData::UInt64 { values: unsafe { mem::transmute::<*const u8, *const u64>(values.data()) } },
-
-      Ty::HalfFloat => ArrayData::HalfFloat { values: unsafe { mem::transmute::<*const u8, *const u16>(values.data()) } },
-      Ty::Float => ArrayData::Float { values: unsafe { mem::transmute::<*const u8, *const f32>(values.data()) } },
-      Ty::Double => ArrayData::Double { values: unsafe { mem::transmute::<*const u8, *const f64>(values.data()) } },
-
-      Ty::Date64 { unit: ref _unit } => ArrayData::Date64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-      Ty::Date32 { unit: ref _unit } => ArrayData::Date32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
-      Ty::Time64 { unit: ref _unit } => ArrayData::Time64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-      Ty::Time32 { unit: ref _unit } => ArrayData::Time32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
-      Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => ArrayData::Timestamp { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-      Ty::Interval { unit: ref _unit } => ArrayData::Interval { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-
-      Ty::FixedSizeBinary { byte_width } => ArrayData::FixedSizeBinary { values: values.data() },
-      Ty::Decimal { precision: _precision, scale: _scale } => ArrayData::Decimal { values: values.data() },
-
-      _ => panic!("[{:?}] is not supported type", ty)
-    };
-
-    Array {
-      ty,
-      length,
-      offset,
-      null_count: Array::compute_null_count(&null_bitmap, offset, length),
-      null_bitmap,
-      data,
-    }
-  }
-
-  pub fn variable_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer, value_offsets: &PoolBuffer) -> Array {
-    let data = match ty {
-      Ty::Binary => ArrayData::Binary {
-        value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) },
-        values: values.data()
-      },
-      _ => panic!()
-    };
-
-    Array {
-      ty,
-      length,
-      offset,
-      null_count: Array::compute_null_count(&null_bitmap, offset, length),
-      null_bitmap,
-      data
-    }
-  }
-
-  pub fn list(value_type: Box<Ty>, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, value_array: Array, value_offsets: &PoolBuffer) -> Array {
-    let data = ArrayData::List {
-      value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) },
-      value_array: Box::new(value_array)
-    };
-    Array {
-      ty: Ty::list(value_type),
-      length,
-      offset,
-      null_count: Array::compute_null_count(&null_bitmap, offset, length),
-      null_bitmap,
-      data
+      builder
     }
   }
 
@@ -252,33 +259,38 @@ impl Array {
 
   #[inline]
   pub fn len(&self) -> i64 {
-    self.length
+//    self.length
+    self.builder.len()
   }
 
   #[inline]
   pub fn offset(&self) -> i64 {
-    self.offset
+//    self.offset
+    unimplemented!()
   }
 
   #[inline]
   pub fn null_count(&self) -> i64 {
-    self.null_count
+//    self.null_count
+    self.builder.null_count()
   }
 
   #[inline]
   pub fn ty(&self) -> &Ty {
-    &self.ty
+//    &self.ty
+    self.builder.ty()
   }
 
   #[inline]
-  pub fn null_bitmap_buffer(&self) -> &Option<PoolBuffer> {
-    &self.null_bitmap
+  pub fn null_bitmap_buffer(&self) -> &PoolBuffer {
+//    &self.null_bitmap
+    self.builder.null_bitmap()
   }
 
-  #[inline]
-  pub fn data(&self) -> &ArrayData {
-    &self.data
-  }
+//  #[inline]
+//  pub fn data(&self) -> &ArrayData {
+//    &self.data
+//  }
 }
 
 impl Debug for Box<Array> {
@@ -315,11 +327,24 @@ pub trait BooleanArray {
   fn bool_value(&self, i: i64) -> bool;
 }
 
-impl BooleanArray for Array {
+impl <'a> BooleanArray for Array<'a> {
   fn bool_value(&self, i: i64) -> bool {
     match self.data() {
       &ArrayData::Bool { ref values } => bit_util::get_bit(*values, i),
       _ => panic!("{:?} is not a boolean array", self.ty())
+    }
+  }
+}
+
+pub trait UInt8Array {
+  fn u8_value(&self, i: i64) -> u8;
+}
+
+impl UInt8Array for Array {
+  fn u8_value(&self, i: i64) -> u8 {
+    match self.data {
+      ArrayData::UInt8 { ref values } => values[i as usize],
+      _ => panic!()
     }
   }
 }
@@ -412,7 +437,7 @@ impl_primitive_array!(ArrayData::Int8, i8);
 impl_primitive_array!(ArrayData::Int16, i16);
 impl_primitive_array!(ArrayData::Int32, ArrayData::Date32, ArrayData::Time32, i32);
 impl_primitive_array!(ArrayData::Int64, ArrayData::Date64, ArrayData::Time64, ArrayData::Timestamp, ArrayData::Interval, i64);
-impl_primitive_array!(ArrayData::UInt8, u8);
+//impl_primitive_array!(ArrayData::UInt8, u8);
 impl_primitive_array!(ArrayData::UInt16, ArrayData::HalfFloat, u16);
 impl_primitive_array!(ArrayData::UInt32, u32);
 impl_primitive_array!(ArrayData::UInt64, u64);

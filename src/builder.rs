@@ -11,18 +11,19 @@ use std::mem;
 
 const MIN_BUILDER_CAPACITY: i64 = 1 << 5;
 
-pub struct ArrayBuilder {
+// TODO: make ArrayData and ues different interfaces for building an array and reading from it
+pub struct ArrayBuilder<'a> {
   init: bool,
   ty: Ty,
   null_bitmap: PoolBuffer,
   null_count: i64,
   length: i64,
   capacity: i64,
-  data: BuilderData
+  data: BuilderData<'a>
 }
 
-impl ArrayBuilder {
-  pub fn new(ty: Ty, null_bitmap: PoolBuffer, data: PoolBuffer) -> ArrayBuilder {
+impl <'a> ArrayBuilder<'a> {
+  pub fn new(ty: Ty, null_bitmap: PoolBuffer, data: PoolBuffer) -> ArrayBuilder<'a> {
     let builder_data = match ty {
       Ty::NA => BuilderData::Null,
       Ty::Bool => BuilderData::Bool { data },
@@ -31,7 +32,14 @@ impl ArrayBuilder {
       Ty::Int16 => BuilderData::Int16 { data },
       Ty::Int32 => BuilderData::Int32 { data },
       Ty::Int64 => BuilderData::Int64 { data },
-      Ty::UInt8 => BuilderData::UInt8 { data },
+      Ty::UInt8 => {
+        let slice = unsafe {
+          use std::slice;
+          slice::from_raw_parts(data.data(), data.size() as usize)
+        };
+
+        BuilderData::UInt8 { data, slice }
+      },
       Ty::UInt16 => BuilderData::UInt16 { data },
       Ty::UInt32 => BuilderData::UInt32 { data },
       Ty::UInt64 => BuilderData::UInt64 { data },
@@ -200,7 +208,7 @@ impl ArrayBuilder {
     match self.reserve(1) {
       Ok(_) => {
         match self.data {
-          BuilderData::UInt8 { ref mut data } => {
+          BuilderData::UInt8 { ref mut data, ref mut slice } => {
             bit_util::set_bit(self.null_bitmap.data_as_mut(), self.length);
             unsafe { *data.data_as_mut().offset(self.length as isize) = val }
             self.length = self.length + 1;
@@ -222,37 +230,29 @@ impl ArrayBuilder {
     self.length = self.length + 1;
   }
 
-  pub fn finish(&self) -> Result<Array, ArrowError> {
+  pub fn build(&self) -> Result<Array, ArrowError> {
     let array = match self.data {
       BuilderData::Null => Array::null(self.length, 0),
 
       // primitive types
       // TODO: null_bitmap should be able to be passed without clone because PoolBuffer.clone() is deep copy
-      BuilderData::Bool      { ref data } |
-      BuilderData::Int8      { ref data } |
-      BuilderData::Int16     { ref data } |
-      BuilderData::Int32     { ref data } |
-      BuilderData::Int64     { ref data } |
-      BuilderData::UInt8     { ref data } |
-      BuilderData::UInt16    { ref data } |
-      BuilderData::UInt32    { ref data } |
-      BuilderData::UInt64    { ref data } |
-      BuilderData::HalfFloat { ref data } |
-      BuilderData::Float     { ref data } |
-      BuilderData::Double    { ref data } |
-      BuilderData::Date64    { ref data } |
-      BuilderData::Date32    { ref data } |
-      BuilderData::Time64    { ref data } |
-      BuilderData::Time32    { ref data } |
-      BuilderData::Timestamp { ref data } |
-      BuilderData::Interval  { ref data } => Array::primitive(
-        self.ty.clone(),
-        self.length,
-        0,
-        Some(self.null_bitmap.clone()),
-        data.clone()
-      ),
-
+      BuilderData::Bool            { ref data } |
+      BuilderData::Int8            { ref data } |
+      BuilderData::Int16           { ref data } |
+      BuilderData::Int32           { ref data } |
+      BuilderData::Int64           { ref data } |
+      BuilderData::UInt16          { ref data } |
+      BuilderData::UInt32          { ref data } |
+      BuilderData::UInt64          { ref data } |
+      BuilderData::HalfFloat       { ref data } |
+      BuilderData::Float           { ref data } |
+      BuilderData::Double          { ref data } |
+      BuilderData::Date64          { ref data } |
+      BuilderData::Date32          { ref data } |
+      BuilderData::Time64          { ref data } |
+      BuilderData::Time32          { ref data } |
+      BuilderData::Timestamp       { ref data } |
+      BuilderData::Interval        { ref data } |
       // fixed size binary types
       BuilderData::FixedSizeBinary { ref data } |
       BuilderData::Decimal         { ref data } => Array::fixed_width(
@@ -260,7 +260,15 @@ impl ArrayBuilder {
         self.length,
         0,
         Some(self.null_bitmap.clone()),
-        data.clone()
+        data
+      ),
+
+      BuilderData::UInt8           { ref data, ref slice } => Array::fixed_width(
+        self.ty.clone(),
+        self.length,
+        0,
+        Some(self.null_bitmap.clone()),
+        data
       ),
 
       _ => panic!()
@@ -271,14 +279,15 @@ impl ArrayBuilder {
 }
 
 #[derive(Clone)]
-enum BuilderData {
+pub enum BuilderData<'a> {
   Null,
   Bool {
     data: PoolBuffer
   },
 
   UInt8 {
-    data: PoolBuffer
+    data: PoolBuffer,
+    slice: &'a [u8]
   },
   Int8 {
     data: PoolBuffer
@@ -360,13 +369,30 @@ enum BuilderData {
   }
 }
 
-impl BuilderData {
+impl <'a> BuilderData<'a> {
+  fn new(ty: Ty, data: PoolBuffer) -> BuilderData<'a> {
+    match ty {
+      Ty::NA => BuilderData::Null,
+      Ty::Bool => BuilderData::Bool { data },
+      Ty::Int8 => BuilderData::Int8 { data },
+      Ty::UInt8 => {
+        let slice = unsafe {
+          use std::slice;
+          slice::from_raw_parts(data.data(), data.size() as usize)
+        };
+
+        BuilderData::UInt8 { data, slice }
+      },
+      _ => panic!()
+    }
+  }
+
   fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
     match self {
       &mut BuilderData::Null => Ok(()),
       &mut BuilderData::Bool { ref mut data } => init_buffer(data, capacity),
-      &mut BuilderData::Int8 { ref mut data } |
-      &mut BuilderData::UInt8 { ref mut data } => init_buffer(data, capacity * 8),
+      &mut BuilderData::Int8 { ref mut data } => init_buffer(data, capacity * 8),
+      &mut BuilderData::UInt8 { ref mut data, ref mut slice } => init_buffer(data, capacity * 8),
       &mut BuilderData::Int16 { ref mut data } |
       &mut BuilderData::UInt16 { ref mut data } => init_buffer(data, capacity * 16),
       _ => panic!()
@@ -377,8 +403,8 @@ impl BuilderData {
     match self {
       &mut BuilderData::Null => Ok(()),
       &mut BuilderData::Bool { ref mut data } => resize_buffer(data, capacity),
-      &mut BuilderData::Int8 { ref mut data } |
-      &mut BuilderData::UInt8 { ref mut data } => resize_buffer(data, capacity * 8),
+      &mut BuilderData::Int8 { ref mut data } => resize_buffer(data, capacity * 8),
+      &mut BuilderData::UInt8 { ref mut data, ref mut slice } => resize_buffer(data, capacity * 8),
       &mut BuilderData::Int16 { ref mut data } |
       &mut BuilderData::UInt16 { ref mut data } => resize_buffer(data, capacity * 16),
       _ => panic!()
@@ -427,7 +453,7 @@ mod tests {
     assert_eq!(100, builder.null_count());
     assert_eq!(128, builder.capacity());
 
-    let array = builder.finish().unwrap();
+    let array = builder.build().unwrap();
 
     assert_eq!(&Ty::NA, array.ty());
     assert_eq!(100, array.null_count());
@@ -456,7 +482,7 @@ mod tests {
     assert_eq!(32, builder.capacity());
     assert_eq!(0, builder.null_count());
 
-    let array = builder.finish().unwrap();
+    let array = builder.build().unwrap();
 
     assert_eq!(&Ty::Bool, array.ty());
     assert_eq!(100, array.len());
@@ -493,7 +519,7 @@ mod tests {
           assert_eq!($expected_capacity, builder.capacity());
           assert_eq!(0, builder.null_count());
 
-          let array = builder.finish().unwrap();
+          let array = builder.build().unwrap();
 
           assert_eq!(&$ty, array.ty());
           assert_eq!(100, array.len());
@@ -508,5 +534,39 @@ mod tests {
   }
 
   test_primitive_type_builder!(test_int8_builder, Ty::Int8, i8, append_int8, 128);
-  test_primitive_type_builder!(test_uint8_builder, Ty::UInt8, u8, append_uint8, 128);
+//  test_primitive_type_builder!(test_uint8_builder, Ty::UInt8, u8, append_uint8, 128);
+
+
+  #[test]
+  fn test_u8_builder() {
+    use rand;
+    use array::UInt8Array;
+
+    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
+    let null_bitmap = PoolBuffer::new(pool.clone());
+    let data = PoolBuffer::new(pool.clone());
+
+    let mut builder = ArrayBuilder::new(Ty::UInt8, null_bitmap, data);
+    let mut expected: Vec<u8> = Vec::new();
+    for i in 0..100 {
+      let val = rand::random::<u8>();
+      builder.append_uint8(val);
+      expected.push(val);
+    }
+
+    assert_eq!(100, builder.len());
+    assert_eq!(128, builder.capacity());
+    assert_eq!(0, builder.null_count());
+
+    let array = builder.build().unwrap();
+
+    assert_eq!(&Ty::UInt8, array.ty());
+    assert_eq!(100, array.len());
+    assert_eq!(0, array.null_count());
+    assert_eq!(0, array.offset());
+
+    for i in 0..100 {
+      assert_eq!(expected[i], array.u8_value(i as i64));
+    }
+  }
 }
