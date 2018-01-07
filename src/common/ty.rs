@@ -100,12 +100,12 @@ pub enum Ty<'a> {
 
   // Struct of logical types
   Struct {
-    fields: Vec<Field>
+    fields: Vec<Field<'a>>
   },
 
   // Unions of logical types
   Union {
-    fields: Vec<Field>,
+    fields: Vec<Field<'a>>,
     type_codes: Vec<u8>,
     mode: UnionMode
   },
@@ -345,13 +345,13 @@ impl <'a> Ty<'a> {
     }
   }
 
-  pub fn struct_type(fields: Vec<Field>) -> Ty<'a> {
+  pub fn struct_type(fields: Vec<Field<'a>>) -> Ty<'a> {
     Ty::Struct {
       fields
     }
   }
 
-  pub fn union(fields: Vec<Field>, type_codes: Vec<u8>) -> Ty<'a> {
+  pub fn union(fields: Vec<Field<'a>>, type_codes: Vec<u8>) -> Ty<'a> {
     Ty::Union {
       fields,
       type_codes,
@@ -359,7 +359,7 @@ impl <'a> Ty<'a> {
     }
   }
 
-  pub fn union_with_mode(fields: Vec<Field>, type_codes: Vec<u8>, mode: UnionMode) -> Ty<'a> {
+  pub fn union_with_mode(fields: Vec<Field<'a>>, type_codes: Vec<u8>, mode: UnionMode) -> Ty<'a> {
     Ty::Union {
       fields,
       type_codes,
@@ -771,6 +771,12 @@ impl <'a> Ty<'a> {
 //      }
 //    };
 //}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum DateUnit {
+  Day,
+  Milli
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Precision {

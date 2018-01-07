@@ -20,102 +20,104 @@ pub struct Array<'a> {
 //  null_bitmap: Option<PoolBuffer>,
 //  data: ArrayData
 
-  builder: ArrayBuilder<'a>
+  builder: ArrayBuilder<'a>,
+  data: ArrayData<'a>
 }
 
-//pub enum ArrayData {
-//  Null,
-//  Bool {
+#[derive(Eq, PartialEq)]
+pub enum ArrayData<'a> {
+  Null,
+  Bool {
 //    values: *const u8
-//  },
-//
-//  UInt8 {
-////    values: *const u8
-//    values: Vec<u8>
-//  },
-//  Int8 {
-//    values: *const i8
-//  },
-//  UInt16 {
-//    values: *const u16
-//  },
-//  Int16 {
-//    values: *const i16
-//  },
-//  UInt32 {
-//    values: *const u32
-//  },
-//  Int32 {
-//    values: *const i32
-//  },
-//  UInt64 {
-//    values: *const u64
-//  },
-//  Int64 {
-//    values: *const i64
-//  },
-//
-//  HalfFloat {
-//    values: *const u16
-//  },
-//  Float {
-//    values: *const f32
-//  },
-//  Double {
-//    values: *const f64
-//  },
-//
-//  Binary {
-//    value_offsets: *const i32, // TODO => maybe Vec<i32>,
+  },
+
+  UInt8 {
 //    values: *const u8
-//  },
-//  String {
-//    value_offsets: *const i32,
-//    values: *const u8
-//  },
-//  FixedSizeBinary {
-//    values: *const u8
-//  },
-//
-//  Date64 {
-//    values: *const i64
-//  },
-//  Date32 {
-//    values: *const i32
-//  },
-//  Timestamp {
-//    values: *const i64
-//  },
-//  Time32 {
-//    values: *const i32
-//  },
-//  Time64 {
-//    values: *const i64
-//  },
-//  Interval {
-//    values: *const i64
-//  },
-//
-//  Decimal {
-//    values: *const u8
-//  },
-//
-//  List {
-//    value_offsets: *const i32,
-//    value_array: Box<Array>
-//  },
-//  Struct {
-//    fields: Vec<Box<Array>>
-//  },
-//  Union {
-//    fields: Vec<Box<Array>>,
-//    value_offsets: *const i32
-//  },
-//
-//  Dictionary {
-//    indices: Box<Array>
-//  }
-//}
+    values: &'a [u8]
+  },
+  Int8 {
+    values: *const i8
+  },
+  UInt16 {
+    values: *const u16
+  },
+  Int16 {
+    values: *const i16
+  },
+  UInt32 {
+    values: *const u32
+  },
+  Int32 {
+    values: *const i32
+  },
+  UInt64 {
+    values: *const u64
+  },
+  Int64 {
+    values: *const i64
+  },
+
+  HalfFloat {
+    values: *const u16
+  },
+  Float {
+    values: *const f32
+  },
+  Double {
+    values: *const f64
+  },
+
+  Binary {
+    value_offsets: *const i32, // TODO => maybe Vec<i32>,
+    values: *const u8
+  },
+  String {
+    value_offsets: *const i32,
+    values: *const u8
+  },
+  FixedSizeBinary {
+    values: *const u8
+  },
+
+  Date64 {
+    values: *const i64
+  },
+  Date32 {
+    values: *const i32
+  },
+  Timestamp {
+    values: *const i64
+  },
+  Time32 {
+    values: *const i32
+  },
+  Time64 {
+    values: *const i64
+  },
+  Interval {
+    values: *const i64
+  },
+
+  Decimal {
+    values: *const u8
+  },
+
+  List {
+    value_offsets: *const i32,
+    value_array: Box<Array<'a>>
+  },
+  Struct {
+    fields: Vec<Box<Array<'a>>>
+  },
+  Union {
+    fields: Vec<Box<Array<'a>>>,
+    value_offsets: *const i32
+  },
+
+  Dictionary {
+    indices: Box<Array<'a>>
+  }
+}
 
 //impl PartialEq for ArrayData {
 //  fn eq(&self, other: &Self) -> bool {
@@ -232,28 +234,39 @@ impl <'a> Array<'a> {
 //  }
 
   pub fn new(builder: ArrayBuilder<'a>) -> Array<'a> {
+    let data = match builder.ty() {
+      &Ty::NA => ArrayData::Null,
+      &Ty::Bool => ArrayData::Bool {},
+      &Ty::UInt8 => {
+        let values = match builder.data() {
+          &BuilderData::UInt8 { ref data } => {
+            use std::slice;
+            unsafe { slice::from_raw_parts(data.data(), data.size() as usize) }
+          }
+          _ => panic!()
+        };
+        ArrayData::UInt8 { values }
+      },
+      _ => panic!()
+    };
+
     Array {
-      builder
+      builder,
+      data
     }
   }
 
   pub fn is_null(&self, i: i64) -> bool {
     match self.ty() {
       &Ty::NA => true,
-      _ => match self.null_bitmap_buffer() {
-        &Some(ref bitmap) => bit_util::bit_not_set(bitmap.data(), i + self.offset()),
-        &None => false
-      }
+      _ => bit_util::bit_not_set(self.null_bitmap_buffer().data(), i + self.offset())
     }
   }
 
   pub fn is_valid(&self, i: i64) -> bool {
     match self.ty() {
       &Ty::NA => false,
-      _ => match self.null_bitmap_buffer() {
-        &Some(ref bitmap) => bit_util::get_bit(bitmap.data(), i + self.offset()),
-        &None => true
-      }
+      _ => bit_util::get_bit(self.null_bitmap_buffer().data(), i + self.offset())
     }
   }
 
@@ -342,8 +355,8 @@ pub trait UInt8Array {
 
 impl <'a> UInt8Array for Array<'a> {
   fn u8_value(&self, i: i64) -> u8 {
-    match self.builder.data() {
-      &BuilderData::UInt8 { ref data, ref slice } => slice[i as usize],
+    match self.data {
+      ArrayData::UInt8 { ref values } => values[i as usize],
       _ => panic!()
     }
   }
@@ -433,7 +446,7 @@ macro_rules! impl_primitive_array {
     };
 }
 
-impl_primitive_array!(BuilderData::Int8, i8);
+//impl_primitive_array!(BuilderData::Int8, i8);
 //impl_primitive_array!(ArrayData::Int16, i16);
 //impl_primitive_array!(ArrayData::Int32, ArrayData::Date32, ArrayData::Time32, i32);
 //impl_primitive_array!(ArrayData::Int64, ArrayData::Date64, ArrayData::Time64, ArrayData::Timestamp, ArrayData::Interval, i64);
