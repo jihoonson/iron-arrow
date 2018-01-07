@@ -15,7 +15,7 @@ use std::fmt::{Debug, Formatter, Error};
 /// nested type consisting of other data types, or another data type (e.g. a
 /// timestamp encoded as an int64)
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum Ty {
+pub enum Ty<'a> {
   // A degenerate NULL type represented as 0 bytes/bits
   NA,
 
@@ -95,7 +95,7 @@ pub enum Ty {
 
   // A list of some logical data type
   List {
-    value_type: Box<Ty>
+    value_type: Box<Ty<'a>>
   },
 
   // Struct of logical types
@@ -112,8 +112,8 @@ pub enum Ty {
 
   // Dictionary aka Category type
   Dictionary {
-    index_type: Box<Ty>,
-    dictionary: Box<Array>,
+    index_type: Box<Ty<'a>>,
+    dictionary: Box<Array<'a>>,
     ordered: bool
   }
 }
@@ -177,181 +177,181 @@ impl BufferDesc {
   }
 }
 
-impl Ty {
-  pub fn null() -> Ty {
+impl <'a> Ty<'a> {
+  pub fn null() -> Ty<'a> {
     Ty::NA
   }
 
-  pub fn bool() -> Ty {
+  pub fn bool() -> Ty<'a> {
     Ty::Bool
   }
 
-  pub fn uint8() -> Ty {
+  pub fn uint8() -> Ty<'a> {
     Ty::UInt8
   }
 
-  pub fn int8() -> Ty {
+  pub fn int8() -> Ty<'a> {
     Ty::Int8
   }
 
-  pub fn uint16() -> Ty {
+  pub fn uint16() -> Ty<'a> {
     Ty::UInt16
   }
 
-  pub fn int16() -> Ty {
+  pub fn int16() -> Ty<'a> {
     Ty::Int16
   }
 
-  pub fn uint32() -> Ty {
+  pub fn uint32() -> Ty<'a> {
     Ty::UInt32
   }
 
-  pub fn int32() -> Ty {
+  pub fn int32() -> Ty<'a> {
     Ty::Int32
   }
 
-  pub fn uint64() -> Ty {
+  pub fn uint64() -> Ty<'a> {
     Ty::UInt64
   }
 
-  pub fn int64() -> Ty {
+  pub fn int64() -> Ty<'a> {
     Ty::Int64
   }
 
-  pub fn halffloat() -> Ty {
+  pub fn halffloat() -> Ty<'a> {
     Ty::HalfFloat
   }
 
-  pub fn float() -> Ty {
+  pub fn float() -> Ty<'a> {
     Ty::Float
   }
 
-  pub fn double() -> Ty {
+  pub fn double() -> Ty<'a> {
     Ty::Double
   }
 
-  pub fn string() -> Ty {
+  pub fn string() -> Ty<'a> {
     Ty::String
   }
 
-  pub fn binary() -> Ty {
+  pub fn binary() -> Ty<'a> {
     Ty::Binary
   }
 
-  pub fn fixed_sized_binary(byte_width: i32) -> Ty {
+  pub fn fixed_sized_binary(byte_width: i32) -> Ty<'a> {
     Ty::FixedSizeBinary {
       byte_width
     }
   }
 
-  pub fn date64() -> Ty {
+  pub fn date64() -> Ty<'a> {
     Ty::Date64 {
       unit: DateUnit::Milli
     }
   }
 
-  pub fn date64_with_unit(unit: DateUnit) -> Ty {
+  pub fn date64_with_unit(unit: DateUnit) -> Ty<'a> {
     Ty::Date64 {
       unit
     }
   }
 
-  pub fn date32() -> Ty {
+  pub fn date32() -> Ty<'a> {
     Ty::Date32 {
       unit: DateUnit::Milli
     }
   }
 
-  pub fn date32_with_unit(unit: DateUnit) -> Ty {
+  pub fn date32_with_unit(unit: DateUnit) -> Ty<'a> {
     Ty::Date32 {
       unit
     }
   }
 
-  pub fn timestamp() -> Ty {
+  pub fn timestamp() -> Ty<'a> {
     Ty::Timestamp {
       unit: TimeUnit::Milli,
       timezone: String::new(),
     }
   }
 
-  pub fn timestamp_with_unit(unit: TimeUnit) -> Ty {
+  pub fn timestamp_with_unit(unit: TimeUnit) -> Ty<'a> {
     Ty::Timestamp {
       unit,
       timezone: String::new()
     }
   }
 
-  pub fn timestamp_with_timezone(timezone: String) -> Ty {
+  pub fn timestamp_with_timezone(timezone: String) -> Ty<'a> {
     Ty::Timestamp {
       unit: TimeUnit::Milli,
       timezone
     }
   }
 
-  pub fn timestamp_with_unit_and_timestamp(unit: TimeUnit, timezone: String) -> Ty {
+  pub fn timestamp_with_unit_and_timestamp(unit: TimeUnit, timezone: String) -> Ty<'a> {
     Ty::Timestamp {
       unit,
       timezone
     }
   }
 
-  pub fn time32() -> Ty {
+  pub fn time32() -> Ty<'a> {
     Ty::Time32 {
       unit: TimeUnit::Milli
     }
   }
 
-  pub fn time32_with_unit(unit: TimeUnit) -> Ty {
+  pub fn time32_with_unit(unit: TimeUnit) -> Ty<'a> {
     Ty::Time32 {
       unit
     }
   }
 
-  pub fn time64() -> Ty {
+  pub fn time64() -> Ty<'a> {
     Ty::Time64 {
       unit: TimeUnit::Milli
     }
   }
 
-  pub fn time64_with_unit(unit: TimeUnit) -> Ty {
+  pub fn time64_with_unit(unit: TimeUnit) -> Ty<'a> {
     Ty::Time64 {
       unit
     }
   }
 
-  pub fn interval() -> Ty {
+  pub fn interval() -> Ty<'a> {
     Ty::Interval {
       unit: IntervalUnit::YearMonth
     }
   }
 
-  pub fn interval_with_unit(unit: IntervalUnit) -> Ty {
+  pub fn interval_with_unit(unit: IntervalUnit) -> Ty<'a> {
     Ty::Interval {
       unit
     }
   }
 
-  pub fn decimal(precision: i32, scale: i32) -> Ty {
+  pub fn decimal(precision: i32, scale: i32) -> Ty<'a> {
     Ty::Decimal {
       precision,
       scale
     }
   }
 
-  pub fn list(value_type: Box<Ty>) -> Ty {
+  pub fn list(value_type: Box<Ty<'a>>) -> Ty<'a> {
     Ty::List {
       value_type
     }
   }
 
-  pub fn struct_type(fields: Vec<Field>) -> Ty {
+  pub fn struct_type(fields: Vec<Field>) -> Ty<'a> {
     Ty::Struct {
       fields
     }
   }
 
-  pub fn union(fields: Vec<Field>, type_codes: Vec<u8>) -> Ty {
+  pub fn union(fields: Vec<Field>, type_codes: Vec<u8>) -> Ty<'a> {
     Ty::Union {
       fields,
       type_codes,
@@ -359,7 +359,7 @@ impl Ty {
     }
   }
 
-  pub fn union_with_mode(fields: Vec<Field>, type_codes: Vec<u8>, mode: UnionMode) -> Ty {
+  pub fn union_with_mode(fields: Vec<Field>, type_codes: Vec<u8>, mode: UnionMode) -> Ty<'a> {
     Ty::Union {
       fields,
       type_codes,
@@ -367,7 +367,7 @@ impl Ty {
     }
   }
 
-  pub fn dictionary(index_type: Box<Ty>, dictionary: Box<Array>) -> Ty {
+  pub fn dictionary(index_type: Box<Ty<'a>>, dictionary: Box<Array<'a>>) -> Ty<'a> {
     if !index_type.is_integer() {
       panic!("index type [{:?}] is not an integer", index_type)
     }
@@ -379,7 +379,7 @@ impl Ty {
     }
   }
 
-  pub fn ordered_dictionary(index_type: Box<Ty>, dictionary: Box<Array>) -> Ty {
+  pub fn ordered_dictionary(index_type: Box<Ty<'a>>, dictionary: Box<Array<'a>>) -> Ty<'a> {
     if !index_type.is_integer() {
       panic!("index type [{:?}] is not an integer", index_type)
     }
@@ -611,7 +611,7 @@ impl Ty {
     }
   }
 
-  pub fn list_value_type(&self) -> &Box<Ty> {
+  pub fn list_value_type(&self) -> &Box<Ty<'a>> {
     match self {
       &Ty::List { ref value_type } => &value_type,
       _ => panic!("{:?} is not a list type", self)
@@ -632,14 +632,14 @@ impl Ty {
     }
   }
 
-  pub fn dictionary_index_type(&self) -> &Box<Ty> {
+  pub fn dictionary_index_type(&self) -> &Box<Ty<'a>> {
     match self {
       &Ty::Dictionary { ref index_type, ref dictionary, ordered } => &index_type,
       _ => panic!("{:?} is not a dictionary type", self)
     }
   }
 
-  pub fn get_dictionary(&self) -> &Box<Array> {
+  pub fn get_dictionary(&self) -> &Box<Array<'a>> {
     match self {
       &Ty::Dictionary { ref index_type, ref dictionary, ordered } => &dictionary,
       _ => panic!("{:?} is not a dictionary type", self)
@@ -771,964 +771,6 @@ impl Ty {
 //      }
 //    };
 //}
-
-//pub trait DataType: BaseDataType + Cast {}
-//
-//// Required to implement this trait for structured data types
-//pub trait NestedType : DataType {
-//  fn child(&self, i: usize) -> &Box<Field>;
-//  fn get_children(&self) -> &Vec<Box<Field>>;
-//  fn num_children(&self) -> i32;
-//}
-//
-//// Required to implement this trait for fixed-size data types
-//pub trait FixedWidthType : DataType {
-//  fn bit_width(&self) -> i32;
-//}
-//
-//pub trait Number : FixedWidthType {}
-//
-//pub trait Integer : Number {
-//  fn is_signed(&self) -> bool;
-//}
-//
-//fn eq_integer(i1: &Integer, i2: &Integer) -> bool {
-//  unimplemented!()
-//}
-//
-//pub trait FloatingPoint : Number {
-//  fn precision(&self) -> Precision;
-//}
-//
-//impl Clone for Box<BaseDataType> {
-//  fn clone(&self) -> Self {
-//    self.box_clone()
-//  }
-//}
-//
-//impl Clone for Box<Integer> {
-//  fn clone(&self) -> Self {
-//    unimplemented!()
-//  }
-//}
-//
-//impl PartialEq for Box<Integer> {
-//  fn eq(&self, other: &Self) -> bool {
-//    unimplemented!()
-//  }
-//}
-//
-//impl Eq for Box<Integer> {
-//
-//}
-//
-//impl Debug for Box<Integer> {
-//  fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-//    unimplemented!()
-//  }
-//}
-//
-//pub struct TypeVisitor {}
-//
-//impl TypeVisitor {
-//  pub fn visit_null(&self, ty: &NullType) {
-//    unimplemented!()
-//  }
-//
-//  pub fn visit_bool(&self, ty: &BooleanType) {
-//    unimplemented!()
-//  }
-//
-//  pub fn visit_uint8(&self, ty: &UInt8Type) {
-//    unimplemented!()
-//  }
-//}
-//
-//pub trait Visit: Sized {
-//  fn accept(&self, visitor: &TypeVisitor) -> Result<&Self, ArrowError>;
-//}
-//
-//macro_rules! impl_default_traits {
-//  ($data_type: ident, $method_name: ident) => {
-//    impl ToString for $data_type {
-//      fn to_string(&self) -> String {
-//        String::from(self.name())
-//      }
-//    }
-//
-//    impl Cast for $data_type {
-//      fn $method_name(&self) -> &$data_type {
-//        &self
-//      }
-//    }
-//
-//    impl DataType for $data_type {}
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct NullType {}
-//
-//impl NullType {
-//  pub fn new() -> NullType {
-//    NullType {}
-//  }
-//}
-//
-//impl BaseDataType for NullType {
-//  fn ty(&self) -> Ty {
-//    Ty::NA
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    Vec::new()
-//  }
-//
-//  fn name(&self) -> &str {
-//    "null"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl Visit for NullType {
-//  fn accept(&self, visitor: &TypeVisitor) -> Result<&NullType, ArrowError> {
-//    visitor.visit_null(&self);
-//    Ok(&self)
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct BooleanType {}
-//
-//impl BooleanType {
-//  pub fn new() -> BooleanType {
-//    BooleanType {}
-//  }
-//}
-//
-//impl BaseDataType for BooleanType {
-//  fn ty(&self) -> Ty {
-//    Ty::Bool
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "bool"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl FixedWidthType for BooleanType {
-//  fn bit_width(&self) -> i32 {
-//    1
-//  }
-//}
-//
-//macro_rules! define_integer {
-//  ($type_name: ident, $ty: path, $name: expr, $bit_width: expr, $signed: expr) => {
-//
-//    #[derive(Debug, Eq, PartialEq, Clone)]
-//    pub struct $type_name {}
-//
-//    impl $type_name {
-//      pub fn new() -> $type_name {
-//        $type_name {}
-//      }
-//    }
-//
-//    impl BaseDataType for $type_name {
-//      fn ty(&self) -> Ty {
-//        $ty
-//      }
-//
-//      fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//        vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//      }
-//
-//      fn name(&self) -> &str {
-//        $name
-//      }
-//
-//      fn box_clone(&self) -> Box<BaseDataType> {
-//        Box::from(self.clone())
-//      }
-//
-//      fn is_integer(&self) -> bool {
-//        true
-//      }
-//   }
-//
-//    impl FixedWidthType for $type_name {
-//      fn bit_width(&self) -> i32 {
-//        $bit_width
-//      }
-//    }
-//
-//    impl Number for $type_name {}
-//
-//    impl Integer for $type_name {
-//      fn is_signed(&self) -> bool {
-//        $signed
-//      }
-//    }
-//  }
-//}
-//
-//macro_rules! define_float {
-//  ($type_name: ident, $ty: path, $name: expr, $bit_width: expr, $precision: path) => {
-//
-//    #[derive(Debug, Eq, PartialEq, Clone)]
-//    pub struct $type_name {}
-//
-//    impl $type_name {
-//      pub fn new() -> $type_name {
-//        $type_name {}
-//      }
-//    }
-//
-//    impl BaseDataType for $type_name {
-//      fn ty(&self) -> Ty {
-//        $ty
-//      }
-//
-//      fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//        vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//      }
-//
-//      fn name(&self) -> &str {
-//        $name
-//      }
-//
-//      fn box_clone(&self) -> Box<BaseDataType> {
-//        Box::from(self.clone())
-//      }
-//
-//      fn is_float(&self) -> bool {
-//        true
-//      }
-//   }
-//
-//    impl FixedWidthType for $type_name {
-//      fn bit_width(&self) -> i32 {
-//        $bit_width
-//      }
-//    }
-//
-//    impl Number for $type_name {}
-//
-//    impl FloatingPoint for $type_name {
-//      fn precision(&self) -> Precision {
-//        $precision
-//      }
-//    }
-//  }
-//}
-//
-//define_integer!(UInt8Type, Ty::UInt8, "uint8", 8, false);
-//define_integer!(UInt16Type, Ty::UInt16, "uint16", 16, false);
-//define_integer!(UInt32Type, Ty::UInt32, "uint32", 32, false);
-//define_integer!(UInt64Type, Ty::UInt64, "uint64", 64, false);
-//define_integer!(Int8Type, Ty::Int8, "int8", 8, true);
-//define_integer!(Int16Type, Ty::Int16, "int16", 16, true);
-//define_integer!(Int32Type, Ty::Int32, "int32", 32, true);
-//define_integer!(Int64Type, Ty::Int64, "int64", 64, true);
-//
-//define_float!(HalfFloatType, Ty::HalfFloat, "halffloat", 16, Precision::Half);
-//define_float!(FloatType, Ty::Float, "float", 32, Precision::Single);
-//define_float!(DoubleType, Ty::Double, "double", 64, Precision::Double);
-//
-//#[derive(Debug, Clone)]
-//pub struct ListType {
-//  value_field: Box<Field>
-//}
-//
-//impl ListType {
-//  pub fn new(value_field: Box<Field>) -> ListType {
-//    ListType {
-//      value_field
-//    }
-//  }
-//
-//  pub fn value_field(&self) -> &Box<Field> {
-//    &self.value_field
-//  }
-//
-//  pub fn value_type(&self) -> &DataType {
-//    self.value_field.get_type()
-//  }
-//}
-//
-//impl BaseDataType for ListType {
-//  fn ty(&self) -> Ty {
-//    Ty::List
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer()]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "list"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    unimplemented!()
-//  }
-//}
-//
-//impl PartialEq for ListType {
-//  fn eq(&self, other: &ListType) -> bool {
-//    unimplemented!()
-//  }
-//}
-//
-//impl Eq for ListType {
-//
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct BinaryType {}
-//
-//impl BinaryType {
-//  pub fn new() -> BinaryType {
-//    BinaryType {}
-//  }
-//}
-//
-//impl BaseDataType for BinaryType {
-//  fn ty(&self) -> Ty {
-//    Ty::Binary
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::new(BufferType::Data, 8)]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "binary"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct FixedSizedBinaryType {
-//  byte_width: i32
-//}
-//
-//impl FixedSizedBinaryType {
-//  pub fn new(byte_width: i32) -> FixedSizedBinaryType {
-//    FixedSizedBinaryType {
-//      byte_width
-//    }
-//  }
-//
-//  pub fn byte_width(&self) -> i32 {
-//    self.byte_width
-//  }
-//}
-//
-//impl BaseDataType for FixedSizedBinaryType {
-//  fn ty(&self) -> Ty {
-//    Ty::FixedSizedBinary
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "fixed_size_binary"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl FixedWidthType for FixedSizedBinaryType {
-//  fn bit_width(&self) -> i32 {
-//    self.byte_width * 8
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct StringType {}
-//
-//impl StringType {
-//  pub fn new() -> StringType {
-//    StringType {}
-//  }
-//}
-//
-//impl BaseDataType for StringType {
-//  fn ty(&self) -> Ty {
-//    Ty::String
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::k_offset_buffer(), BufferDesc::new(BufferType::Data, 8)]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "utf8"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct StructType {
-//  fields: Vec<Box<Field>>
-//}
-//
-//impl StructType {
-//  pub fn new(fields: Vec<Box<Field>>) -> StructType {
-//    StructType {
-//      fields
-//    }
-//  }
-//}
-//
-//impl BaseDataType for StructType {
-//  fn ty(&self) -> Ty {
-//    Ty::Struct
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer()]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "struct"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl NestedType for StructType {
-//  fn child(&self, i: usize) -> &Box<Field> {
-//    &self.fields[i]
-//  }
-//
-//  fn get_children(&self) -> &Vec<Box<Field>> {
-//    &self.fields
-//  }
-//
-//  fn num_children(&self) -> i32 {
-//    self.fields.len() as i32
-//  }
-//}
-//
-//impl Index<usize> for StructType {
-//  type Output = Box<Field>;
-//
-//  #[inline]
-//  fn index(&self, index: usize) -> &Box<Field> {
-//    &self.fields[index]
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct DecimalType {
-//  precision: i32,
-//  scale: i32
-//}
-//
-//impl DecimalType {
-//  pub fn new(precision: i32, scale: i32) -> DecimalType {
-//    DecimalType {
-//      precision,
-//      scale
-//    }
-//  }
-//
-//  pub fn precision(&self) -> i32 {
-//    self.precision
-//  }
-//
-//  pub fn scale(&self) -> i32 {
-//    self.scale
-//  }
-//}
-//
-//impl BaseDataType for DecimalType {
-//  fn ty(&self) -> Ty {
-//    Ty::Decimal
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "decimal"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl FixedWidthType for DecimalType {
-//  fn bit_width(&self) -> i32 {
-//    16 * 8
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct UnionType {
-//  fields: Vec<Box<Field>>,
-//  type_codes: Vec<u8>,
-//  mode: UnionMode
-//}
-//
-//impl UnionType {
-//  pub fn new(fields: Vec<Box<Field>>, type_codes: Vec<u8>) -> UnionType {
-//    UnionType {
-//      fields,
-//      type_codes,
-//      mode: UnionMode::SPARSE,
-//    }
-//  }
-//
-//  pub fn with_mode(fields: Vec<Box<Field>>, type_codes: Vec<u8>, mode: UnionMode) -> UnionType {
-//    UnionType {
-//      fields,
-//      type_codes,
-//      mode
-//    }
-//  }
-//
-//  pub fn type_codes(&self) -> &Vec<u8> {
-//    &self.type_codes
-//  }
-//
-//  pub fn mode(&self) -> &UnionMode {
-//    &self.mode
-//  }
-//}
-//
-//impl BaseDataType for UnionType {
-//  fn ty(&self) -> Ty {
-//    Ty::Union
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    match self.mode {
-//      UnionMode::SPARSE => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer()],
-//      _ => vec![BufferDesc::k_validity_buffer(), BufferDesc::k_type_buffer(), BufferDesc::k_offset_buffer()]
-//    }
-//  }
-//
-//  fn name(&self) -> &str {
-//    "union"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl NestedType for UnionType {
-//  fn child(&self, i: usize) -> &Box<Field> {
-//    &self.fields[i]
-//  }
-//
-//  fn get_children(&self) -> &Vec<Box<Field>> {
-//    &self.fields
-//  }
-//
-//  fn num_children(&self) -> i32 {
-//    self.fields.len() as i32
-//  }
-//}
-//
-//impl Index<usize> for UnionType {
-//  type Output = Box<Field>;
-//
-//  #[inline]
-//  fn index(&self, index: usize) -> &Box<Field> {
-//    &self.fields[index]
-//  }
-//}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum DateUnit {
-  Day,
-  Milli
-}
-
-//pub trait DateType : FixedWidthType {
-//  fn unit(&self) -> &DateUnit;
-//}
-//
-//macro_rules! define_date_type {
-//    ($type_name: ident, $ty: path, $name: expr, $bit_width: expr) => {
-//        #[derive(Debug, Eq, PartialEq, Clone)]
-//        pub struct $type_name {
-//          unit: DateUnit
-//        }
-//
-//        impl $type_name {
-//          pub fn new(unit: DateUnit) -> $type_name {
-//            $type_name {
-//              unit
-//            }
-//          }
-//        }
-//
-//        impl BaseDataType for $type_name {
-//          fn ty(&self) -> Ty {
-//            $ty
-//          }
-//
-//          fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//            vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//          }
-//
-//          fn name(&self) -> &str {
-//            $name
-//          }
-//
-//          fn box_clone(&self) -> Box<BaseDataType> {
-//            Box::from(self.clone())
-//          }
-//       }
-//
-//        impl FixedWidthType for $type_name {
-//          fn bit_width(&self) -> i32 {
-//            $bit_width
-//          }
-//        }
-//
-//        impl DateType for $type_name {
-//          fn unit(&self) -> &DateUnit {
-//            &self.unit
-//          }
-//        }
-//    }
-//}
-//
-//define_date_type!(Date32Type, Ty::Date32, "date32", 32);
-//define_date_type!(Date64Type, Ty::Date64, "date64", 64);
-//
-//
-//pub trait TimeType : FixedWidthType {
-//  fn unit(&self) -> &TimeUnit;
-//}
-//
-//macro_rules! define_time_type {
-//    ($type_name: ident, $ty: path, $name: expr, $bit_width: expr) => {
-//        #[derive(Debug, Eq, PartialEq, Clone)]
-//        pub struct $type_name {
-//          unit: TimeUnit
-//        }
-//
-//        impl $type_name {
-//          #[inline]
-//          pub fn default_unit() -> TimeUnit {
-//            TimeUnit::Milli
-//          }
-//
-//          pub fn new() -> $type_name {
-//            $type_name {
-//              unit: TimeUnit::Milli
-//            }
-//          }
-//
-//          pub fn with_unit(unit: TimeUnit) -> $type_name {
-//            $type_name {
-//              unit
-//            }
-//          }
-//        }
-//
-//        impl BaseDataType for $type_name {
-//          fn ty(&self) -> Ty {
-//            $ty
-//          }
-//
-//          fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//            vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//          }
-//
-//          fn name(&self) -> &str {
-//            $name
-//          }
-//
-//          fn box_clone(&self) -> Box<BaseDataType> {
-//            Box::from(self.clone())
-//          }
-//       }
-//
-//        impl FixedWidthType for $type_name {
-//          fn bit_width(&self) -> i32 {
-//            $bit_width
-//          }
-//        }
-//
-//        impl TimeType for $type_name {
-//          fn unit(&self) -> &TimeUnit {
-//            &self.unit
-//          }
-//        }
-//    }
-//}
-//
-//define_time_type!(Time32Type, Ty::Time32, "time32", 32);
-//define_time_type!(Time64Type, Ty::Time64, "time64", 64);
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct TimestampType {
-//  unit: TimeUnit,
-//  timezone: String
-//}
-//
-//impl TimestampType {
-//  pub fn default_unit() -> TimeUnit {
-//    TimeUnit::Milli
-//  }
-//
-//  pub fn default_timezone() -> String {
-//    String::new()
-//  }
-//
-//  pub fn new() -> TimestampType {
-//    TimestampType {
-//      unit: TimeUnit::Milli,
-//      timezone: String::new()
-//    }
-//  }
-//
-//  pub fn with_unit(unit: TimeUnit) -> TimestampType {
-//    TimestampType {
-//      unit,
-//      timezone: String::new()
-//    }
-//  }
-//
-//  pub fn with_unit_and_timezone(unit: TimeUnit, timezone: String) -> TimestampType {
-//    TimestampType {
-//      unit,
-//      timezone
-//    }
-//  }
-//
-//  pub fn unit(&self) -> &TimeUnit {
-//    &self.unit
-//  }
-//
-//  pub fn timezone(&self) -> &String {
-//    &self.timezone
-//  }
-//}
-//
-//impl BaseDataType for TimestampType {
-//  fn ty(&self) -> Ty {
-//    Ty::Timestamp
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "timestamp"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl FixedWidthType for TimestampType {
-//  fn bit_width(&self) -> i32 {
-//    64
-//  }
-//}
-//
-//#[derive(Debug, Eq, PartialEq, Clone)]
-//pub struct IntervalType {
-//  unit: IntervalUnit
-//}
-//
-//impl IntervalType {
-//  pub fn new() -> IntervalType {
-//    IntervalType {
-//      unit: IntervalUnit::YearMonth
-//    }
-//  }
-//
-//  pub fn with_unit(unit: IntervalUnit) -> IntervalType {
-//    IntervalType {
-//      unit
-//    }
-//  }
-//}
-//
-//impl BaseDataType for IntervalType {
-//  fn ty(&self) -> Ty {
-//    Ty::Interval
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "interval"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl FixedWidthType for IntervalType {
-//  fn bit_width(&self) -> i32 {
-//    64
-//  }
-//}
-//
-//#[derive(Debug, Clone)]
-//pub struct DictionaryType {
-//  index_type: Box<Integer>,
-//  dictionary: Box<Array>,
-//  ordered: bool
-//}
-//
-//impl DictionaryType {
-//  pub fn unordered(index_type: Box<Integer>, dictionary: Box<Array>) -> DictionaryType {
-//    DictionaryType {
-//      index_type,
-//      dictionary,
-//      ordered: false
-//    }
-//  }
-//
-//  pub fn ordered(index_type: Box<Integer>, dictionary: Box<Array>) -> DictionaryType {
-//    DictionaryType {
-//      index_type,
-//      dictionary,
-//      ordered: true
-//    }
-//  }
-//
-//  pub fn new(index_type: Box<Integer>, dictionary: Box<Array>, ordered: bool) -> DictionaryType {
-//    DictionaryType {
-//      index_type,
-//      dictionary,
-//      ordered
-//    }
-//  }
-//
-//  pub fn index_type(&self) -> &Box<Integer> {
-//    &self.index_type
-//  }
-//
-//  pub fn dictionary(&self) -> &Box<Array> {
-//    &self.dictionary
-//  }
-//
-//  pub fn is_ordered(&self) -> bool {
-//    self.ordered
-//  }
-//}
-//
-//impl BaseDataType for DictionaryType {
-//  fn ty(&self) -> Ty {
-//    Ty::Dictionary
-//  }
-//
-//  fn get_buffer_layout(&self) -> Vec<BufferDesc> {
-//    vec![BufferDesc::k_validity_buffer(), BufferDesc::new(BufferType::Data, self.bit_width())]
-//  }
-//
-//  fn name(&self) -> &str {
-//    "dictionary"
-//  }
-//
-//  fn box_clone(&self) -> Box<BaseDataType> {
-//    Box::from(self.clone())
-//  }
-//}
-//
-//impl FixedWidthType for DictionaryType {
-//  fn bit_width(&self) -> i32 {
-//    self.index_type.bit_width()
-//  }
-//}
-//
-//impl PartialEq for DictionaryType {
-//  fn eq(&self, other: &Self) -> bool {
-//    eq_integer(self.index_type.as_ref(), other.index_type.as_ref()) &&
-//      array::array_eq(self.dictionary.as_ref(), other.dictionary.as_ref()) &&
-//      self.ordered == other.ordered
-//  }
-//}
-//
-//impl Eq for DictionaryType {}
-//
-//
-//impl Visit for BooleanType {
-//  fn accept(&self, visitor: &TypeVisitor) -> Result<&BooleanType, ArrowError> {
-//    visitor.visit_bool(&self);
-//    Ok(&self)
-//  }
-//}
-//
-//impl Visit for UInt8Type {
-//  fn accept(&self, visitor: &TypeVisitor) -> Result<&Self, ArrowError> {
-//    visitor.visit_uint8(&self);
-//    Ok(&self)
-//  }
-//}
-//
-//// TODO: impl Visit
-//
-//impl_default_traits!(NullType, as_null);
-//impl_default_traits!(BooleanType, as_bool);
-//impl_default_traits!(UInt8Type, as_uint8);
-//impl_default_traits!(UInt16Type, as_uint16);
-//impl_default_traits!(UInt32Type, as_uint32);
-//impl_default_traits!(UInt64Type, as_uint64);
-//impl_default_traits!(Int8Type, as_int8);
-//impl_default_traits!(Int16Type, as_int16);
-//impl_default_traits!(Int32Type, as_int32);
-//impl_default_traits!(Int64Type, as_int64);
-//impl_default_traits!(HalfFloatType, as_half_float);
-//impl_default_traits!(FloatType, as_float);
-//impl_default_traits!(DoubleType, as_double);
-//impl_default_traits!(BinaryType, as_binary);
-//impl_default_traits!(FixedSizedBinaryType, as_fixed_sized_binary);
-//impl_default_traits!(StringType, as_string);
-//impl_default_traits!(DecimalType, as_decimal);
-//impl_default_traits!(Date32Type, as_date32);
-//impl_default_traits!(Date64Type, as_date64);
-//impl_default_traits!(Time32Type, as_time32);
-//impl_default_traits!(Time64Type, as_time64);
-//impl_default_traits!(TimestampType, as_timestamp);
-//impl_default_traits!(IntervalType, as_interval);
-//impl_default_traits!(ListType, as_list);
-//impl_default_traits!(UnionType, as_union);
-//impl_default_traits!(StructType, as_struct);
-//impl_default_traits!(DictionaryType, as_dictionary);
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Precision {

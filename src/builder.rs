@@ -91,6 +91,10 @@ impl <'a> ArrayBuilder<'a> {
     self.capacity
   }
 
+  pub fn data(&self) -> &BuilderData<'a> {
+    self.data
+  }
+
   fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
     match init_buffer(&mut self.null_bitmap, capacity) {
       Ok(_) => {

@@ -5,15 +5,15 @@ use array::Array;
 use std::fmt::{Debug, Formatter, Error};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Field {
+pub struct Field<'a> {
   name: String,
-  data_type: Ty, // TODO => Ty
+  data_type: Ty<'a>,
   nullable: bool,
   metadata: Option<KeyValueMetadata>
 }
 
-impl Field {
-  pub fn new(name: String, data_type: Ty) -> Field {
+impl <'a> Field<'a> {
+  pub fn new(name: String, data_type: Ty<'a>) -> Field<'a> {
     Field {
       name,
       data_type,
@@ -22,7 +22,7 @@ impl Field {
     }
   }
 
-  pub fn non_null(name: String, data_type: Ty) -> Field {
+  pub fn non_null(name: String, data_type: Ty<'a>) -> Field<'a> {
     Field {
       name,
       data_type,
@@ -31,7 +31,7 @@ impl Field {
     }
   }
 
-  pub fn new_with_metadata(name: String, data_type: Ty, metadata: KeyValueMetadata) -> Field {
+  pub fn new_with_metadata(name: String, data_type: Ty<'a>, metadata: KeyValueMetadata) -> Field<'a> {
     Field {
       name,
       data_type,
@@ -40,7 +40,7 @@ impl Field {
     }
   }
 
-  pub fn non_null_with_metadata(name: String, data_type: Ty, metadata: KeyValueMetadata) -> Field {
+  pub fn non_null_with_metadata(name: String, data_type: Ty<'a>, metadata: KeyValueMetadata) -> Field<'a> {
     Field {
       name,
       data_type,
@@ -68,7 +68,7 @@ impl Field {
     &self.metadata
   }
 
-  pub fn with_metadata(&self, metadata: KeyValueMetadata) -> Field {
+  pub fn with_metadata(&self, metadata: KeyValueMetadata) -> Field<'a> {
     Field {
       name: self.name.clone(),
       data_type: self.data_type.clone(),
@@ -77,7 +77,7 @@ impl Field {
     }
   }
 
-  pub fn without_metadata(&self) -> Field {
+  pub fn without_metadata(&self) -> Field<'a> {
     Field {
       name: self.name.clone(),
       data_type: self.data_type.clone(),
