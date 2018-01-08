@@ -66,8 +66,9 @@ pub enum ArrayData<'a> {
   },
 
   Binary {
-    value_offsets: *const i32, // TODO => maybe Vec<i32>,
-    values: *const u8
+//    value_offsets: *const i32, // TODO => maybe Vec<i32>,
+//    values: *const u8
+    values: Vec<*const u8>
   },
   String {
     value_offsets: *const i32,

@@ -288,7 +288,9 @@ pub enum BuilderData {
   },
 
   Binary {
-
+    null_bitmap: PoolBuffer,
+    offsets: PoolBuffer,
+    data: PoolBuffer
   },
   String {
 
