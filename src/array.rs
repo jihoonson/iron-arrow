@@ -8,6 +8,7 @@ use builder::{ArrayBuilder, BuilderData};
 
 use std::ptr;
 use std::mem;
+use std::slice;
 
 use std::fmt::{Debug, Formatter, Error};
 
@@ -33,25 +34,25 @@ pub enum ArrayData<'a> {
     values: &'a [u8]
   },
   Int8 {
-    values: *const i8
+    values: &'a [i8]
   },
   UInt16 {
-    values: *const u16
+    values: &'a [u16]
   },
   Int16 {
-    values: *const i16
+    values: &'a [i16]
   },
   UInt32 {
-    values: *const u32
+    values: &'a [u32]
   },
   Int32 {
-    values: *const i32
+    values: &'a [i32]
   },
   UInt64 {
-    values: *const u64
+    values: &'a [u64]
   },
   Int64 {
-    values: *const i64
+    values: &'a [i64]
   },
 
   HalfFloat {
@@ -143,101 +144,49 @@ impl <'a> Array<'a> {
     }
   }
 
-//  pub fn null(length: i64, offset: i64) -> Array {
-//    Array {
-//      ty: Ty::null(),
-//      length,
-//      offset,
-//      null_count: length,
-//      null_bitmap: None,
-//      data: ArrayData::Null
-//    }
-//  }
-//
-//  pub fn fixed_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer) -> Array {
-//    let data = match ty {
-//      Ty::NA => ArrayData::Null,
-//      Ty::Bool => ArrayData::Bool { values: values.data() },
-//
-//      Ty::Int8 => ArrayData::Int8 { values: unsafe { mem::transmute::<*const u8, *const i8>(values.data()) } },
-//      Ty::Int16 => ArrayData::Int16 { values: unsafe { mem::transmute::<*const u8, *const i16>(values.data()) } },
-//      Ty::Int32 => ArrayData::Int32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
-//      Ty::Int64 => ArrayData::Int64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-////      Ty::UInt8 => ArrayData::UInt8 { values: values.data() },
-//      Ty::UInt8 => ArrayData::UInt8 { values: values.as_vec() },
-//      Ty::UInt16 => ArrayData::UInt16 { values: unsafe { mem::transmute::<*const u8, *const u16>(values.data()) } },
-//      Ty::UInt32 => ArrayData::UInt32 { values: unsafe { mem::transmute::<*const u8, *const u32>(values.data()) } },
-//      Ty::UInt64 => ArrayData::UInt64 { values: unsafe { mem::transmute::<*const u8, *const u64>(values.data()) } },
-//
-//      Ty::HalfFloat => ArrayData::HalfFloat { values: unsafe { mem::transmute::<*const u8, *const u16>(values.data()) } },
-//      Ty::Float => ArrayData::Float { values: unsafe { mem::transmute::<*const u8, *const f32>(values.data()) } },
-//      Ty::Double => ArrayData::Double { values: unsafe { mem::transmute::<*const u8, *const f64>(values.data()) } },
-//
-//      Ty::Date64 { unit: ref _unit } => ArrayData::Date64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-//      Ty::Date32 { unit: ref _unit } => ArrayData::Date32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
-//      Ty::Time64 { unit: ref _unit } => ArrayData::Time64 { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-//      Ty::Time32 { unit: ref _unit } => ArrayData::Time32 { values: unsafe { mem::transmute::<*const u8, *const i32>(values.data()) } },
-//      Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => ArrayData::Timestamp { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-//      Ty::Interval { unit: ref _unit } => ArrayData::Interval { values: unsafe { mem::transmute::<*const u8, *const i64>(values.data()) } },
-//
-//      Ty::FixedSizeBinary { byte_width } => ArrayData::FixedSizeBinary { values: values.data() },
-//      Ty::Decimal { precision: _precision, scale: _scale } => ArrayData::Decimal { values: values.data() },
-//
-//      _ => panic!("[{:?}] is not supported type", ty)
-//    };
-//
-//    Array {
-//      ty,
-//      length,
-//      offset,
-//      null_count: Array::compute_null_count(&null_bitmap, offset, length),
-//      null_bitmap,
-//      data,
-//    }
-//  }
-//
-//  pub fn variable_width(ty: Ty, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, values: &PoolBuffer, value_offsets: &PoolBuffer) -> Array {
-//    let data = match ty {
-//      Ty::Binary => ArrayData::Binary {
-//        value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) },
-//        values: values.data()
-//      },
-//      _ => panic!()
-//    };
-//
-//    Array {
-//      ty,
-//      length,
-//      offset,
-//      null_count: Array::compute_null_count(&null_bitmap, offset, length),
-//      null_bitmap,
-//      data
-//    }
-//  }
-//
-//  pub fn list(value_type: Box<Ty>, length: i64, offset: i64, null_bitmap: Option<PoolBuffer>, value_array: Array, value_offsets: &PoolBuffer) -> Array {
-//    let data = ArrayData::List {
-//      value_offsets: unsafe { mem::transmute::<*const u8, *const i32>(value_offsets.data()) },
-//      value_array: Box::new(value_array)
-//    };
-//    Array {
-//      ty: Ty::list(value_type),
-//      length,
-//      offset,
-//      null_count: Array::compute_null_count(&null_bitmap, offset, length),
-//      null_bitmap,
-//      data
-//    }
-//  }
-
   pub fn new(builder: ArrayBuilder<'a>) -> Array<'a> {
     let data = match builder.data() {
       &BuilderData::Null => ArrayData::Null,
       &BuilderData::Bool { ref null_bitmap, ref data } => ArrayData::Bool,
       &BuilderData::UInt8 { ref null_bitmap, ref data } => {
-        use std::slice;
-        let values = unsafe { slice::from_raw_parts(data.data(), data.size() as usize) };
-        ArrayData::UInt8 { values }
+        ArrayData::UInt8 {
+          values : unsafe { slice::from_raw_parts(data.data(), builder.len() as usize) }
+        }
+      },
+      &BuilderData::Int8 { ref null_bitmap, ref data } => {
+        ArrayData::Int8 {
+          values : unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const i8>(data.data()), builder.len() as usize) }
+        }
+      },
+      &BuilderData::UInt16 { ref null_bitmap, ref data } => {
+        ArrayData::UInt16 {
+          values : unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const u16>(data.data()), builder.len() as usize) }
+        }
+      },
+      &BuilderData::Int16 { ref null_bitmap, ref data } => {
+        ArrayData::Int16 {
+          values : unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const i16>(data.data()), builder.len() as usize) }
+        }
+      },
+      &BuilderData::UInt32 { ref null_bitmap, ref data } => {
+        ArrayData::UInt32 {
+          values : unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const u32>(data.data()), builder.len() as usize) }
+        }
+      },
+      &BuilderData::Int32 { ref null_bitmap, ref data } => {
+        ArrayData::Int32 {
+          values : unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const i32>(data.data()), builder.len() as usize) }
+        }
+      },
+      &BuilderData::UInt64 { ref null_bitmap, ref data } => {
+        ArrayData::UInt64 {
+          values : unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const u64>(data.data()), builder.len() as usize) }
+        }
+      },
+      &BuilderData::Int64 { ref null_bitmap, ref data } => {
+        ArrayData::Int64 {
+          values : unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const i64>(data.data()), builder.len() as usize) }
+        }
       },
       _ => panic!()
     };
@@ -312,6 +261,7 @@ impl <'a> Clone for Box<Array<'a>> {
   }
 }
 
+#[inline]
 fn raw_value<T: Copy>(values: *const T, i: i64) -> T {
   unsafe { *values.offset(i as isize) }
 }
@@ -330,55 +280,40 @@ fn raw_values<T>(value_buffer: &Option<PoolBuffer>, offset: i64) -> *const T {
 
 // TODO: maybe need cast?
 
-pub trait BooleanArray {
-  fn bool_value(&self, i: i64) -> bool;
+pub trait ArrowSlice<T> {
+  fn value(&self, i: i64) -> T;
+  fn values(&self) -> &[T];
 }
 
-impl <'a> BooleanArray for Array<'a> {
-  fn bool_value(&self, i: i64) -> bool {
+impl <'a> ArrowSlice<bool> for Array<'a> {
+  fn value(&self, i: i64) -> bool {
     match self.builder.data() {
       &BuilderData::Bool { ref null_bitmap, ref data } => bit_util::get_bit(data.data(), i),
       _ => panic!("{:?} is not a boolean array", self.ty())
     }
   }
-}
 
-pub trait UInt8Array {
-  fn u8_value(&self, i: i64) -> u8;
-}
-
-impl <'a> UInt8Array for Array<'a> {
-  fn u8_value(&self, i: i64) -> u8 {
-    match self.data {
-      ArrayData::UInt8 { ref values } => values[i as usize],
-      _ => panic!()
-    }
+  fn values(&self) -> &[bool] {
+    unimplemented!()
   }
 }
 
-pub trait PrimitiveArray<T: Copy> {
-  fn prim_value(&self, i: i64) -> T;
-
-//  fn prim_values(&self) -> &[T]; TODO: support this after PoolBuffer.as_vec() is fixed
-}
-
-macro_rules! impl_primitive_array {
+macro_rules! impl_arrow_slice {
     ($ty: path, $prim_ty: ident) => {
-      impl <'a > PrimitiveArray<$prim_ty> for Array<'a> {
-        fn prim_value(&self, i: i64) -> $prim_ty {
-          match self.builder.data() {
-//            &$ty { ref values } => values[i as usize],
-              &$ty { ref data } => unsafe { *data.data().offset(i as isize) },
+      impl <'a > ArrowSlice<$prim_ty> for Array<'a> {
+        fn value(&self, i: i64) -> $prim_ty {
+          match self.data {
+            $ty { ref values } => values[i as usize],
             _ => panic!("{:?} is not a boolean array", self.ty())
           }
         }
 
-//        fn prim_values(&self) -> &[$prim_ty] {
-//          match self.data() {
-//            &$ty { ref values } => values.as_slice(),
-//            _ => panic!("{:?} is not a boolean array", self.ty())
-//          }
-//        }
+        fn values(&self) -> &[$prim_ty] {
+          match self.data {
+            $ty { ref values } => *values,
+            _ => panic!("{:?} is not a boolean array", self.ty())
+          }
+        }
       }
     };
 
@@ -440,15 +375,18 @@ macro_rules! impl_primitive_array {
     };
 }
 
-//impl_primitive_array!(BuilderData::Int8, i8);
-//impl_primitive_array!(ArrayData::Int16, i16);
-//impl_primitive_array!(ArrayData::Int32, ArrayData::Date32, ArrayData::Time32, i32);
-//impl_primitive_array!(ArrayData::Int64, ArrayData::Date64, ArrayData::Time64, ArrayData::Timestamp, ArrayData::Interval, i64);
-////impl_primitive_array!(ArrayData::UInt8, u8);
-//impl_primitive_array!(ArrayData::UInt16, ArrayData::HalfFloat, u16);
-//impl_primitive_array!(ArrayData::UInt32, u32);
-//impl_primitive_array!(ArrayData::UInt64, u64);
-//
+impl_arrow_slice!(ArrayData::Int8, i8);
+impl_arrow_slice!(ArrayData::Int16, i16);
+impl_arrow_slice!(ArrayData::Int32, i32);
+impl_arrow_slice!(ArrayData::Int64, i64);
+//impl_arrow_slice!(ArrayData::Int32, ArrayData::Date32, ArrayData::Time32, i32);
+//impl_arrow_slice!(ArrayData::Int64, ArrayData::Date64, ArrayData::Time64, ArrayData::Timestamp, ArrayData::Interval, i64);
+impl_arrow_slice!(ArrayData::UInt8, u8);
+impl_arrow_slice!(ArrayData::UInt16, u16);
+//impl_arrow_slice!(ArrayData::UInt16, ArrayData::HalfFloat, u16);
+impl_arrow_slice!(ArrayData::UInt32, u32);
+impl_arrow_slice!(ArrayData::UInt64, u64);
+
 //impl_primitive_array!(ArrayData::Float, f32);
 //impl_primitive_array!(ArrayData::Double, f64);
 
@@ -593,11 +531,11 @@ pub trait Cast {
 //    unimplemented!("Cannot cast to null")
 //  }
 
-  fn as_bool(&self) -> &PrimitiveArray<bool> {
+  fn as_bool(&self) -> &ArrowSlice<bool> {
     unimplemented!("Cannot cast to boolean")
   }
 
-  fn as_int8(&self) -> &PrimitiveArray<i8> {
+  fn as_int8(&self) -> &ArrowSlice<i8> {
     unimplemented!("Cannot cast to int8")
   }
 

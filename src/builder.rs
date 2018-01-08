@@ -172,8 +172,14 @@ impl <'a> ArrayBuilder<'a> {
       }
     }
   }
+}
 
-  pub fn append_bool(&mut self, val: bool) -> Result<(), ArrowError> {
+pub trait Append<T> {
+  fn append(&mut self, val: T) -> Result<(), ArrowError>;
+}
+
+impl <'a> Append<bool> for ArrayBuilder<'a> {
+  fn append(&mut self, val: bool) -> Result<(), ArrowError> {
     match self.reserve(1) {
       Ok(_) => {
         match self.data {
@@ -193,88 +199,39 @@ impl <'a> ArrayBuilder<'a> {
       Err(e) => Err(e)
     }
   }
-
-  pub fn append_int8(&mut self, val: i8) -> Result<(), ArrowError> {
-    match self.reserve(1) {
-      Ok(_) => {
-        match self.data {
-          BuilderData::Int8 { ref mut null_bitmap, ref mut data } => {
-            bit_util::set_bit(null_bitmap.data_as_mut(), self.length);
-            unsafe { *(mem::transmute::<*mut u8, *mut i8>(data.data_as_mut()).offset(self.length as isize)) = val }
-            self.length = self.length + 1;
-            Ok(())
-          },
-          _ => panic!()
-        }
-      },
-      Err(e) => Err(e)
-    }
-  }
-
-  pub fn append_uint8(&mut self, val: u8) -> Result<(), ArrowError> {
-    match self.reserve(1) {
-      Ok(_) => {
-        match self.data {
-          BuilderData::UInt8 { ref mut null_bitmap, ref mut data } => {
-            bit_util::set_bit(null_bitmap.data_as_mut(), self.length);
-            unsafe { *data.data_as_mut().offset(self.length as isize) = val }
-            self.length = self.length + 1;
-            Ok(())
-          },
-          _ => panic!()
-        }
-      },
-      Err(e) => Err(e)
-    }
-  }
-
-//  pub fn build(&self) -> Result<Array, ArrowError> {
-//    let array = match self.data {
-//      BuilderData::Null => Array::null(self.length, 0),
-//
-//      // primitive types
-//      // TODO: null_bitmap should be able to be passed without clone because PoolBuffer.clone() is deep copy
-//      BuilderData::Bool            { ref data } |
-//      BuilderData::Int8            { ref data } |
-//      BuilderData::Int16           { ref data } |
-//      BuilderData::Int32           { ref data } |
-//      BuilderData::Int64           { ref data } |
-//      BuilderData::UInt16          { ref data } |
-//      BuilderData::UInt32          { ref data } |
-//      BuilderData::UInt64          { ref data } |
-//      BuilderData::HalfFloat       { ref data } |
-//      BuilderData::Float           { ref data } |
-//      BuilderData::Double          { ref data } |
-//      BuilderData::Date64          { ref data } |
-//      BuilderData::Date32          { ref data } |
-//      BuilderData::Time64          { ref data } |
-//      BuilderData::Time32          { ref data } |
-//      BuilderData::Timestamp       { ref data } |
-//      BuilderData::Interval        { ref data } |
-//      // fixed size binary types
-//      BuilderData::FixedSizeBinary { ref data } |
-//      BuilderData::Decimal         { ref data } => Array::fixed_width(
-//        self.ty.clone(),
-//        self.length,
-//        0,
-//        Some(self.null_bitmap.clone()),
-//        data
-//      ),
-//
-//      BuilderData::UInt8           { ref data, ref slice } => Array::fixed_width(
-//        self.ty.clone(),
-//        self.length,
-//        0,
-//        Some(self.null_bitmap.clone()),
-//        data
-//      ),
-//
-//      _ => panic!()
-//    };
-//
-//    Ok(array)
-//  }
 }
+
+macro_rules! impl_append_for_primitive_type {
+    ($ty: ty, $builder_data: path) => {
+      impl <'a> Append<$ty> for ArrayBuilder<'a> {
+        fn append(&mut self, val: $ty) -> Result<(), ArrowError> {
+          match self.reserve(1) {
+            Ok(_) => {
+              match self.data {
+                $builder_data { ref mut null_bitmap, ref mut data } => {
+                  bit_util::set_bit(null_bitmap.data_as_mut(), self.length);
+                  unsafe { *(mem::transmute::<*mut u8, *mut $ty>(data.data_as_mut()).offset(self.length as isize)) = val }
+                  self.length = self.length + 1;
+                  Ok(())
+                },
+                _ => panic!()
+              }
+            },
+            Err(e) => Err(e)
+          }
+        }
+      }
+    };
+}
+
+impl_append_for_primitive_type!(u8, BuilderData::UInt8);
+impl_append_for_primitive_type!(i8, BuilderData::Int8);
+impl_append_for_primitive_type!(u16, BuilderData::UInt16);
+impl_append_for_primitive_type!(i16, BuilderData::Int16);
+impl_append_for_primitive_type!(u32, BuilderData::UInt32);
+impl_append_for_primitive_type!(i32, BuilderData::Int32);
+impl_append_for_primitive_type!(u64, BuilderData::UInt64);
+impl_append_for_primitive_type!(i64, BuilderData::Int64);
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum BuilderData {
@@ -387,16 +344,6 @@ pub enum BuilderData {
 }
 
 impl BuilderData {
-  fn new(ty: Ty, null_bitmap: PoolBuffer, data: PoolBuffer) -> BuilderData {
-    match ty {
-      Ty::NA => BuilderData::Null,
-      Ty::Bool => BuilderData::Bool { null_bitmap, data },
-      Ty::Int8 => BuilderData::Int8 { null_bitmap, data },
-      Ty::UInt8 => BuilderData::UInt8 { null_bitmap, data },
-      _ => panic!()
-    }
-  }
-
   fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
     match self {
       &mut BuilderData::Null => Ok(()),
@@ -417,6 +364,20 @@ impl BuilderData {
       &mut BuilderData::UInt16 { ref mut null_bitmap, ref mut data } => {
         match init_buffer(null_bitmap, capacity) {
           Ok(_) => init_buffer(data, capacity * 16),
+          Err(e) => Err(e)
+        }
+      },
+      &mut BuilderData::Int32 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::UInt32 { ref mut null_bitmap, ref mut data } => {
+        match init_buffer(null_bitmap, capacity) {
+          Ok(_) => init_buffer(data, capacity * 32),
+          Err(e) => Err(e)
+        }
+      },
+      &mut BuilderData::Int64 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::UInt64 { ref mut null_bitmap, ref mut data } => {
+        match init_buffer(null_bitmap, capacity) {
+          Ok(_) => init_buffer(data, capacity * 64),
           Err(e) => Err(e)
         }
       },
@@ -447,6 +408,20 @@ impl BuilderData {
           Err(e) => Err(e)
         }
       },
+      &mut BuilderData::Int32 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::UInt32 { ref mut null_bitmap, ref mut data } => {
+        match resize_buffer(null_bitmap, capacity) {
+          Ok(_) => resize_buffer(data, capacity * 32),
+          Err(e) => Err(e)
+        }
+      },
+      &mut BuilderData::Int64 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::UInt64 { ref mut null_bitmap, ref mut data } => {
+        match resize_buffer(null_bitmap, capacity) {
+          Ok(_) => resize_buffer(data, capacity * 64),
+          Err(e) => Err(e)
+        }
+      },
       _ => panic!()
     }
   }
@@ -457,7 +432,11 @@ impl BuilderData {
       &BuilderData::Int8 { ref null_bitmap, ref data } |
       &BuilderData::UInt8 { ref null_bitmap, ref data } |
       &BuilderData::Int16 { ref null_bitmap, ref data } |
-      &BuilderData::UInt16 { ref null_bitmap, ref data } => Some(null_bitmap),
+      &BuilderData::UInt16 { ref null_bitmap, ref data } |
+      &BuilderData::Int32 { ref null_bitmap, ref data } |
+      &BuilderData::UInt32 { ref null_bitmap, ref data } |
+      &BuilderData::Int64 { ref null_bitmap, ref data } |
+      &BuilderData::UInt64 { ref null_bitmap, ref data } => Some(null_bitmap),
       _ => None
     }
   }
@@ -469,6 +448,10 @@ impl BuilderData {
       &BuilderData::UInt8 { ref null_bitmap, ref data } => 8,
       &BuilderData::Int16 { ref null_bitmap, ref data } |
       &BuilderData::UInt16 { ref null_bitmap, ref data } => 16,
+      &BuilderData::Int32 { ref null_bitmap, ref data } |
+      &BuilderData::UInt32 { ref null_bitmap, ref data } => 32,
+      &BuilderData::Int64 { ref null_bitmap, ref data } |
+      &BuilderData::UInt64 { ref null_bitmap, ref data } => 64,
       _ => panic!()
     }
   }
@@ -522,7 +505,8 @@ mod tests {
   #[test]
   fn test_bool_builder() {
     use rand;
-    use array::BooleanArray;
+    use array::ArrowSlice;
+    use builder::Append;
 
     let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
     let null_bitmap = PoolBuffer::new(pool.clone());
@@ -532,7 +516,7 @@ mod tests {
     let mut expected: Vec<bool> = Vec::new();
     for i in 0..100 {
       let val = rand::random::<bool>();
-      builder.append_bool(val);
+      builder.append(val);
       expected.push(val);
     }
 
@@ -548,18 +532,19 @@ mod tests {
 //    assert_eq!(0, array.offset());
 
     for i in 0..100 {
-      assert_eq!(expected[i], array.bool_value(i as i64));
+      assert_eq!(expected[i], array.value(i as i64));
     }
   }
 
   // TODO: test boolean with null
 
   macro_rules! test_primitive_type_builder {
-      ($test_name: ident, $ty: path, $prim_ty: ty, $append_method: ident, $expected_capacity: expr) => {
+      ($test_name: ident, $ty: path, $prim_ty: ty, $expected_capacity: expr) => {
         #[test]
         fn $test_name() {
           use rand;
-          use array::PrimitiveArray;
+          use array::ArrowSlice;
+          use builder::Append;
 
           let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
           let null_bitmap = PoolBuffer::new(pool.clone());
@@ -569,7 +554,7 @@ mod tests {
           let mut expected: Vec<$prim_ty> = Vec::new();
           for i in 0..100 {
             let val = rand::random::<$prim_ty>();
-            builder.$append_method(val);
+            builder.append(val);
             expected.push(val);
           }
 
@@ -582,49 +567,23 @@ mod tests {
           assert_eq!(&$ty, array.ty());
           assert_eq!(100, array.len());
           assert_eq!(0, array.null_count());
-          assert_eq!(0, array.offset());
+//          assert_eq!(0, array.offset());
 
           for i in 0..100 {
-            assert_eq!(expected[i], array.prim_value(i as i64));
+            assert_eq!(expected[i], array.value(i as i64));
           }
+
+          assert_eq!(expected, array.values());
         }
       };
   }
 
-//  test_primitive_type_builder!(test_int8_builder, Ty::Int8, i8, append_int8, 128);
-//  test_primitive_type_builder!(test_uint8_builder, Ty::UInt8, u8, append_uint8, 128);
-
-
-  #[test]
-  fn test_u8_builder() {
-    use rand;
-    use array::UInt8Array;
-
-    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
-    let null_bitmap = PoolBuffer::new(pool.clone());
-    let data = PoolBuffer::new(pool.clone());
-
-    let mut builder = ArrayBuilder::new(Ty::UInt8, null_bitmap, data);
-    let mut expected: Vec<u8> = Vec::new();
-    for i in 0..100 {
-      let val = rand::random::<u8>();
-      builder.append_uint8(val);
-      expected.push(val);
-    }
-
-    assert_eq!(100, builder.len());
-    assert_eq!(128, builder.capacity());
-    assert_eq!(0, builder.null_count());
-
-    let array = Array::new(builder);
-
-    assert_eq!(&Ty::UInt8, array.ty());
-    assert_eq!(100, array.len());
-    assert_eq!(0, array.null_count());
-//    assert_eq!(0, array.offset());
-
-    for i in 0..100 {
-      assert_eq!(expected[i], array.u8_value(i as i64));
-    }
-  }
+  test_primitive_type_builder!(test_i8_builder, Ty::Int8, i8, 128);
+  test_primitive_type_builder!(test_u8_builder, Ty::UInt8, u8, 128);
+  test_primitive_type_builder!(test_i16_builder, Ty::Int16, i16, 128);
+  test_primitive_type_builder!(test_u16_builder, Ty::UInt16, u16, 128);
+  test_primitive_type_builder!(test_i32_builder, Ty::Int32, i32, 128);
+  test_primitive_type_builder!(test_u32_builder, Ty::UInt32, u32, 128);
+  test_primitive_type_builder!(test_i64_builder, Ty::Int64, i64, 128);
+  test_primitive_type_builder!(test_u64_builder, Ty::UInt64, u64, 128);
 }
