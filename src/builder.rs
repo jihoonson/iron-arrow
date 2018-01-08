@@ -16,7 +16,6 @@ const MIN_BUILDER_CAPACITY: i64 = 1 << 5;
 pub struct ArrayBuilder<'a> {
   init: bool,
   ty: Ty<'a>,
-  null_bitmap: PoolBuffer,
   null_count: i64,
   length: i64,
   capacity: i64,
@@ -24,32 +23,42 @@ pub struct ArrayBuilder<'a> {
 }
 
 impl <'a> ArrayBuilder<'a> {
+  pub fn null(len: i64) -> ArrayBuilder<'a> {
+    ArrayBuilder {
+      init: true,
+      ty: Ty::NA,
+      null_count: 0,
+      length: len,
+      capacity: 0,
+      data: BuilderData::Null
+    }
+  }
+
   pub fn new(ty: Ty<'a>, null_bitmap: PoolBuffer, data: PoolBuffer) -> ArrayBuilder<'a> {
     let builder_data = match ty {
-      Ty::NA => BuilderData::Null,
-      Ty::Bool => BuilderData::Bool { data },
+      Ty::Bool => BuilderData::Bool { null_bitmap, data },
 
-      Ty::Int8 => BuilderData::Int8 { data },
-      Ty::Int16 => BuilderData::Int16 { data },
-      Ty::Int32 => BuilderData::Int32 { data },
-      Ty::Int64 => BuilderData::Int64 { data },
-      Ty::UInt8 => BuilderData::UInt8 { data },
-      Ty::UInt16 => BuilderData::UInt16 { data },
-      Ty::UInt32 => BuilderData::UInt32 { data },
-      Ty::UInt64 => BuilderData::UInt64 { data },
+      Ty::Int8 => BuilderData::Int8 { null_bitmap, data },
+      Ty::Int16 => BuilderData::Int16 { null_bitmap, data },
+      Ty::Int32 => BuilderData::Int32 { null_bitmap, data },
+      Ty::Int64 => BuilderData::Int64 { null_bitmap, data },
+      Ty::UInt8 => BuilderData::UInt8 { null_bitmap, data },
+      Ty::UInt16 => BuilderData::UInt16 { null_bitmap, data },
+      Ty::UInt32 => BuilderData::UInt32 { null_bitmap, data },
+      Ty::UInt64 => BuilderData::UInt64 { null_bitmap, data },
 
-      Ty::HalfFloat => BuilderData::HalfFloat { data },
-      Ty::Float => BuilderData::Float { data },
-      Ty::Double => BuilderData::Double { data },
+      Ty::HalfFloat => BuilderData::HalfFloat { null_bitmap, data },
+      Ty::Float => BuilderData::Float { null_bitmap, data },
+      Ty::Double => BuilderData::Double { null_bitmap, data },
 
-      Ty::Date64 { unit: ref _unit } => BuilderData::Date64 { data },
-      Ty::Date32 { unit: ref _unit } => BuilderData::Date32 { data },
-      Ty::Time64 { unit: ref _unit } => BuilderData::Time64 { data },
-      Ty::Time32 { unit: ref _unit } => BuilderData::Time32 { data },
-      Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => BuilderData::Timestamp { data },
-      Ty::Interval { unit: ref _unit } => BuilderData::Interval { data },
+      Ty::Date64 { unit: ref _unit } => BuilderData::Date64 { null_bitmap, data },
+      Ty::Date32 { unit: ref _unit } => BuilderData::Date32 { null_bitmap, data },
+      Ty::Time64 { unit: ref _unit } => BuilderData::Time64 { null_bitmap, data },
+      Ty::Time32 { unit: ref _unit } => BuilderData::Time32 { null_bitmap, data },
+      Ty::Timestamp { unit: ref _unit, timezone: ref _timezone } => BuilderData::Timestamp { null_bitmap, data },
+      Ty::Interval { unit: ref _unit } => BuilderData::Interval { null_bitmap, data },
 
-      Ty::FixedSizeBinary { byte_width } => BuilderData::FixedSizeBinary { data },
+      Ty::FixedSizeBinary { byte_width } => BuilderData::FixedSizeBinary { null_bitmap, data },
 
       _ => panic!("[{:?}] is not supported type", ty)
     };
@@ -57,7 +66,6 @@ impl <'a> ArrayBuilder<'a> {
     ArrayBuilder {
       init: false,
       ty,
-      null_bitmap,
       null_count: 0,
       length: 0,
       capacity: 0,
@@ -69,8 +77,8 @@ impl <'a> ArrayBuilder<'a> {
     &self.ty
   }
 
-  pub fn null_bitmap(&self) ->&PoolBuffer {
-    &self.null_bitmap
+  pub fn null_bitmap(&self) ->Option<&PoolBuffer> {
+    self.data.null_bitmap()
   }
 
   pub fn null_count(&self) -> i64 {
@@ -90,16 +98,10 @@ impl <'a> ArrayBuilder<'a> {
   }
 
   fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
-    match init_buffer(&mut self.null_bitmap, capacity) {
+    match self.data.init(capacity) {
       Ok(_) => {
-        self.capacity = capacity;
-        match self.data.init(capacity) {
-          Ok(_) => {
-            self.init = true;
-            Ok(())
-          },
-          Err(e) => Err(e)
-        }
+        self.init = true;
+        Ok(())
       },
       Err(e) => Err(e)
     }
@@ -112,10 +114,10 @@ impl <'a> ArrayBuilder<'a> {
       return self.init(new_capacity);
     }
 
-    match resize_buffer(&mut self.null_bitmap, new_capacity) {
+    match self.data.resize(new_capacity) {
       Ok(_) => {
         self.capacity = new_capacity;
-        self.data.resize(new_capacity)
+        Ok(())
       },
       Err(e) => Err(e)
     }
@@ -149,18 +151,25 @@ impl <'a> ArrayBuilder<'a> {
   // append methods
 
   pub fn append_null(&mut self) -> Result<(), ArrowError> {
-    let required_elem = match self.data {
-      BuilderData::Null => 0,
-      BuilderData::Bool { ref data } => 1,
-      _ => panic!()
-    };
-
-    match self.reserve(required_elem) {
-      Ok(_) => {
-        self.unsafe_append_to_bitmap(false);
+    match self.data {
+      BuilderData::Null => {
+        self.null_count = self.null_count + 1;
+        self.length = self.length + 1;
+        if self.length > self.capacity {
+          self.capacity = bit_util::next_power_2(self.length);
+        }
         Ok(())
       },
-      Err(e) => Err(e)
+      _ => {
+        match self.reserve(1) {
+          Ok(_) => {
+            self.null_count = self.null_count + 1;
+            self.length = self.length + 1;
+            Ok(())
+          },
+          Err(e) => Err(e)
+        }
+      }
     }
   }
 
@@ -168,8 +177,8 @@ impl <'a> ArrayBuilder<'a> {
     match self.reserve(1) {
       Ok(_) => {
         match self.data {
-          BuilderData::Bool { ref mut data } => {
-            bit_util::set_bit(self.null_bitmap.data_as_mut(), self.length);
+          BuilderData::Bool { ref mut null_bitmap, ref mut data } => {
+            bit_util::set_bit(null_bitmap.data_as_mut(), self.length);
             if val {
               bit_util::set_bit(data.data_as_mut(), self.length);
             } else {
@@ -189,8 +198,8 @@ impl <'a> ArrayBuilder<'a> {
     match self.reserve(1) {
       Ok(_) => {
         match self.data {
-          BuilderData::Int8 { ref mut data } => {
-            bit_util::set_bit(self.null_bitmap.data_as_mut(), self.length);
+          BuilderData::Int8 { ref mut null_bitmap, ref mut data } => {
+            bit_util::set_bit(null_bitmap.data_as_mut(), self.length);
             unsafe { *(mem::transmute::<*mut u8, *mut i8>(data.data_as_mut()).offset(self.length as isize)) = val }
             self.length = self.length + 1;
             Ok(())
@@ -206,8 +215,8 @@ impl <'a> ArrayBuilder<'a> {
     match self.reserve(1) {
       Ok(_) => {
         match self.data {
-          BuilderData::UInt8 { ref mut data } => {
-            bit_util::set_bit(self.null_bitmap.data_as_mut(), self.length);
+          BuilderData::UInt8 { ref mut null_bitmap, ref mut data } => {
+            bit_util::set_bit(null_bitmap.data_as_mut(), self.length);
             unsafe { *data.data_as_mut().offset(self.length as isize) = val }
             self.length = self.length + 1;
             Ok(())
@@ -217,15 +226,6 @@ impl <'a> ArrayBuilder<'a> {
       },
       Err(e) => Err(e)
     }
-  }
-
-  fn unsafe_append_to_bitmap(&mut self, is_valid: bool) {
-    if is_valid {
-      bit_util::set_bit(self.null_bitmap.data_as_mut(), self.length);
-    } else {
-      self.null_count = self.null_count + 1;
-    }
-    self.length = self.length + 1;
   }
 
 //  pub fn build(&self) -> Result<Array, ArrowError> {
@@ -280,41 +280,53 @@ impl <'a> ArrayBuilder<'a> {
 pub enum BuilderData {
   Null,
   Bool {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
 
   UInt8 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Int8 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   UInt16 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Int16 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   UInt32 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Int32 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   UInt64 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Int64 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
 
   HalfFloat {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Float {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Double {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
 
@@ -325,29 +337,37 @@ pub enum BuilderData {
 
   },
   FixedSizeBinary {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
 
   Date64 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Date32 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Timestamp {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Time32 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Time64 {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
   Interval {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
 
   Decimal {
+    null_bitmap: PoolBuffer,
     data: PoolBuffer
   },
 
@@ -367,12 +387,12 @@ pub enum BuilderData {
 }
 
 impl BuilderData {
-  fn new(ty: Ty, data: PoolBuffer) -> BuilderData {
+  fn new(ty: Ty, null_bitmap: PoolBuffer, data: PoolBuffer) -> BuilderData {
     match ty {
       Ty::NA => BuilderData::Null,
-      Ty::Bool => BuilderData::Bool { data },
-      Ty::Int8 => BuilderData::Int8 { data },
-      Ty::UInt8 => BuilderData::UInt8 { data },
+      Ty::Bool => BuilderData::Bool { null_bitmap, data },
+      Ty::Int8 => BuilderData::Int8 { null_bitmap, data },
+      Ty::UInt8 => BuilderData::UInt8 { null_bitmap, data },
       _ => panic!()
     }
   }
@@ -380,11 +400,26 @@ impl BuilderData {
   fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
     match self {
       &mut BuilderData::Null => Ok(()),
-      &mut BuilderData::Bool { ref mut data } => init_buffer(data, capacity),
-      &mut BuilderData::Int8 { ref mut data } |
-      &mut BuilderData::UInt8 { ref mut data } => init_buffer(data, capacity * 8),
-      &mut BuilderData::Int16 { ref mut data } |
-      &mut BuilderData::UInt16 { ref mut data } => init_buffer(data, capacity * 16),
+      &mut BuilderData::Bool { ref mut null_bitmap, ref mut data } => {
+        match init_buffer(null_bitmap, capacity) {
+          Ok(_) => init_buffer(data, capacity),
+          Err(e) => Err(e)
+        }
+      },
+      &mut BuilderData::Int8 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::UInt8 { ref mut null_bitmap, ref mut data } => {
+        match init_buffer(null_bitmap, capacity) {
+          Ok(_) => init_buffer(data, capacity * 8),
+          Err(e) => Err(e)
+        }
+      },
+      &mut BuilderData::Int16 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::UInt16 { ref mut null_bitmap, ref mut data } => {
+        match init_buffer(null_bitmap, capacity) {
+          Ok(_) => init_buffer(data, capacity * 16),
+          Err(e) => Err(e)
+        }
+      },
       _ => panic!()
     }
   }
@@ -392,11 +427,48 @@ impl BuilderData {
   fn resize(&mut self, capacity: i64) -> Result<(), ArrowError> {
     match self {
       &mut BuilderData::Null => Ok(()),
-      &mut BuilderData::Bool { ref mut data } => resize_buffer(data, capacity),
-      &mut BuilderData::Int8 { ref mut data } |
-      &mut BuilderData::UInt8 { ref mut data } => resize_buffer(data, capacity * 8),
-      &mut BuilderData::Int16 { ref mut data } |
-      &mut BuilderData::UInt16 { ref mut data } => resize_buffer(data, capacity * 16),
+      &mut BuilderData::Bool { ref mut null_bitmap, ref mut data } => {
+        match resize_buffer(null_bitmap, capacity) {
+          Ok(_) => resize_buffer(data, capacity),
+          Err(e) => Err(e)
+        }
+      },
+      &mut BuilderData::Int8 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::UInt8 { ref mut null_bitmap, ref mut data } => {
+        match resize_buffer(null_bitmap, capacity) {
+          Ok(_) => resize_buffer(data, capacity * 8),
+          Err(e) => Err(e)
+        }
+      },
+      &mut BuilderData::Int16 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::UInt16 { ref mut null_bitmap, ref mut data } => {
+        match resize_buffer(null_bitmap, capacity) {
+          Ok(_) => resize_buffer(data, capacity * 16),
+          Err(e) => Err(e)
+        }
+      },
+      _ => panic!()
+    }
+  }
+
+  fn null_bitmap(&self) -> Option<&PoolBuffer> {
+    match self {
+      &BuilderData::Bool { ref null_bitmap, ref data } |
+      &BuilderData::Int8 { ref null_bitmap, ref data } |
+      &BuilderData::UInt8 { ref null_bitmap, ref data } |
+      &BuilderData::Int16 { ref null_bitmap, ref data } |
+      &BuilderData::UInt16 { ref null_bitmap, ref data } => Some(null_bitmap),
+      _ => None
+    }
+  }
+
+  fn element_bit_len(&self) -> usize {
+    match self {
+      &BuilderData::Null => 0,
+      &BuilderData::Int8 { ref null_bitmap, ref data } |
+      &BuilderData::UInt8 { ref null_bitmap, ref data } => 8,
+      &BuilderData::Int16 { ref null_bitmap, ref data } |
+      &BuilderData::UInt16 { ref null_bitmap, ref data } => 16,
       _ => panic!()
     }
   }
@@ -430,11 +502,7 @@ mod tests {
 
   #[test]
   fn test_null_builder() {
-    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
-    let null_bitmap = PoolBuffer::new(pool.clone());
-    let data = PoolBuffer::new(pool.clone());
-
-    let mut builder = ArrayBuilder::new(Ty::NA, null_bitmap, data);
+    let mut builder = ArrayBuilder::null(0);
     for i in 0..100 {
       builder.append_null();
     }

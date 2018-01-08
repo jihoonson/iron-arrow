@@ -362,6 +362,11 @@ mod tests {
   #[test]
   fn test_is_integer() {
     use array::Array;
+    use builder::ArrayBuilder;
+    use memory_pool::DefaultMemoryPool;
+    use buffer::PoolBuffer;
+    use std::sync::Arc;
+    use std::cell::RefCell;
 
     assert!(Ty::uint8().is_integer());
     assert!(Ty::uint16().is_integer());
@@ -389,12 +394,21 @@ mod tests {
     assert_eq!(false, Ty::list(Box::new(Ty::int8())).is_integer());
     assert_eq!(false, Ty::struct_type(vec![Field::new(String::from("f1"), Ty::int8())]).is_integer());
     assert_eq!(false, Ty::union(vec![Field::new(String::from("f1"), Ty::int8())], vec![0]).is_integer());
-//    assert_eq!(false, Ty::dictionary(Box::new(Ty::int8()), Box::new(Array::null(10, 0))).is_integer());
+
+    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
+    let null_bitmap = PoolBuffer::new(pool);
+    let builder = ArrayBuilder::null(10);
+    assert_eq!(false, Ty::dictionary(Box::new(Ty::int8()), Box::new(Array::new(builder))).is_integer());
   }
 
   #[test]
   fn test_is_float() {
     use array::Array;
+    use builder::ArrayBuilder;
+    use memory_pool::DefaultMemoryPool;
+    use buffer::PoolBuffer;
+    use std::sync::Arc;
+    use std::cell::RefCell;
 
     assert!(Ty::halffloat().is_float());
     assert!(Ty::float().is_float());
@@ -422,6 +436,10 @@ mod tests {
     assert_eq!(false, Ty::list(Box::new(Ty::int8())).is_float());
     assert_eq!(false, Ty::struct_type(vec![Field::new(String::from("f1"), Ty::int8())]).is_float());
     assert_eq!(false, Ty::union(vec![Field::new(String::from("f1"), Ty::int8())], vec![0]).is_float());
-//    assert_eq!(false, Ty::dictionary(Box::new(Ty::int8()), Box::new(Array::null(10, 0))).is_float());
+
+    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
+    let null_bitmap = PoolBuffer::new(pool);
+    let builder = ArrayBuilder::null(10);
+    assert_eq!(false, Ty::dictionary(Box::new(Ty::int8()), Box::new(Array::new(builder))).is_float());
   }
 }

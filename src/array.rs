@@ -27,12 +27,9 @@ pub struct Array<'a> {
 #[derive(Eq, PartialEq)]
 pub enum ArrayData<'a> {
   Null,
-  Bool {
-//    values: *const u8
-  },
+  Bool,
 
   UInt8 {
-//    values: *const u8
     values: &'a [u8]
   },
   Int8 {
@@ -234,17 +231,12 @@ impl <'a> Array<'a> {
 //  }
 
   pub fn new(builder: ArrayBuilder<'a>) -> Array<'a> {
-    let data = match builder.ty() {
-      &Ty::NA => ArrayData::Null,
-      &Ty::Bool => ArrayData::Bool {},
-      &Ty::UInt8 => {
-        let values = match builder.data() {
-          &BuilderData::UInt8 { ref data } => {
-            use std::slice;
-            unsafe { slice::from_raw_parts(data.data(), data.size() as usize) }
-          }
-          _ => panic!()
-        };
+    let data = match builder.data() {
+      &BuilderData::Null => ArrayData::Null,
+      &BuilderData::Bool { ref null_bitmap, ref data } => ArrayData::Bool,
+      &BuilderData::UInt8 { ref null_bitmap, ref data } => {
+        use std::slice;
+        let values = unsafe { slice::from_raw_parts(data.data(), data.size() as usize) };
         ArrayData::UInt8 { values }
       },
       _ => panic!()
@@ -259,20 +251,25 @@ impl <'a> Array<'a> {
   pub fn is_null(&self, i: i64) -> bool {
     match self.ty() {
       &Ty::NA => true,
-      _ => bit_util::bit_not_set(self.null_bitmap_buffer().data(), i + self.offset())
+      _ => match self.null_bitmap_buffer() {
+        Some(ref null_bitmap) => bit_util::bit_not_set(null_bitmap.data(), i + self.offset()),
+        None => panic!()
+      }
     }
   }
 
   pub fn is_valid(&self, i: i64) -> bool {
     match self.ty() {
       &Ty::NA => false,
-      _ => bit_util::get_bit(self.null_bitmap_buffer().data(), i + self.offset())
+      _ => match self.null_bitmap_buffer() {
+        Some(ref null_bitmap) => bit_util::get_bit(null_bitmap.data(), i + self.offset()),
+        None => panic!()
+      }
     }
   }
 
   #[inline]
   pub fn len(&self) -> i64 {
-//    self.length
     self.builder.len()
   }
 
@@ -284,19 +281,16 @@ impl <'a> Array<'a> {
 
   #[inline]
   pub fn null_count(&self) -> i64 {
-//    self.null_count
     self.builder.null_count()
   }
 
   #[inline]
   pub fn ty(&self) -> &Ty {
-//    &self.ty
     self.builder.ty()
   }
 
   #[inline]
-  pub fn null_bitmap_buffer(&self) -> &PoolBuffer {
-//    &self.null_bitmap
+  pub fn null_bitmap_buffer(&self) -> Option<&PoolBuffer> {
     self.builder.null_bitmap()
   }
 
@@ -343,7 +337,7 @@ pub trait BooleanArray {
 impl <'a> BooleanArray for Array<'a> {
   fn bool_value(&self, i: i64) -> bool {
     match self.builder.data() {
-      &BuilderData::Bool { ref data } => bit_util::get_bit(data.data(), i),
+      &BuilderData::Bool { ref null_bitmap, ref data } => bit_util::get_bit(data.data(), i),
       _ => panic!("{:?} is not a boolean array", self.ty())
     }
   }
@@ -457,142 +451,142 @@ macro_rules! impl_primitive_array {
 //
 //impl_primitive_array!(ArrayData::Float, f32);
 //impl_primitive_array!(ArrayData::Double, f64);
-//
-//pub struct VariableWidthElem {
-//  p: *const u8,
-//  len: i32
-//}
-//
-//pub trait VariableWidthArray {
-//  fn value(&self, i: i64) -> VariableWidthElem;
-//
-//  fn value_offset(&self, i: i64) -> i32;
-//
-//  fn value_len(&self, i: i64) -> i32;
-//}
-//
-//fn value_offset(value_offsets: &*const i32, i: i64) -> i32 {
-//  unsafe { *value_offsets.offset(i as isize) }
-//}
-//
-//fn value_len(value_offsets: &*const i32, i: i64) -> i32 {
-//  unsafe {
-//    let i_as_isize = i as isize;
-//    let pos = *value_offsets.offset(i_as_isize);
-//    *value_offsets.offset(i_as_isize + 1) - pos
-//  }
-//}
-//
-//impl VariableWidthArray for Array {
-//  fn value(&self, i: i64) -> VariableWidthElem {
-//    match self.data {
-//      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
-//        let offset = i + self.offset();
-//        unsafe {
-//          let pos = *value_offsets.offset(i as isize);
-//          let value_len = *value_offsets.offset((offset + 1) as isize) - pos;
-//          VariableWidthElem {
-//            p: values.offset(pos as isize),
-//            len: value_len
-//          }
-//        }
-//      },
-//      ArrayData::List { ref value_offsets, ref value_array } => {
-//        unimplemented!()
-//      }
-//      _ => panic!()
-//    }
-//  }
-//
-//  fn value_offset(&self, i: i64) -> i32 {
-//    match self.data {
-//      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
-//        value_offset(value_offsets, i)
-//      },
-//      ArrayData::List { ref value_offsets, ref value_array } => {
-//        value_offset(value_offsets, i)
-//      },
-//      _ => panic!()
-//    }
-//  }
-//
-//  fn value_len(&self, i: i64) -> i32 {
-//    match self.data {
-//      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
-//        value_len(value_offsets, i)
-//      },
-//      ArrayData::List { ref value_offsets, ref value_array } => {
-//        value_len(value_offsets, i)
-//      },
-//      _ => panic!()
-//    }
-//  }
-//}
-//
-//pub trait StringArray {
-//  fn string(&self, i: i64) -> String;
-//}
-//
-//impl <T> StringArray for T where T: VariableWidthArray {
-//  fn string(&self, i: i64) -> String {
-//    let elem = self.value(i);
-//    unsafe { String::from_raw_parts(mem::transmute::<*const u8, *mut u8>(elem.p), elem.len as usize, elem.len as usize) }
-//  }
-//}
-//
-//pub trait FixedSizeBinaryArray {
-//  fn byte_width(&self) -> i32;
-//
-//  fn fixed_size_value(&self, i: i64) -> *const u8;
-//
-//  fn fixed_size_values(&self) -> *const u8;
-//}
-//
-//impl FixedSizeBinaryArray for Array {
-//  fn byte_width(&self) -> i32 {
-//    match self.ty() {
-//      &Ty::FixedSizeBinary { byte_width } => byte_width,
-//      &Ty::Decimal { precision: _precision, scale: _scale } => 16,
-//      _ => panic!("{:?} is not fixed sized binary type", self.ty())
-//    }
-//  }
-//
-//  fn fixed_size_value(&self, i: i64) -> *const u8 {
-//    match self.data() {
-//      &ArrayData::FixedSizeBinary { ref values } => unsafe { values.offset(((self.offset() + i) * self.byte_width() as i64) as isize) },
-//      _ => panic!()
-//    }
-//  }
-//
-//  fn fixed_size_values(&self) -> *const u8 {
-//    match self.data() {
-//      &ArrayData::FixedSizeBinary { ref values } => unsafe { values.offset((self.offset() * self.byte_width() as i64) as isize) },
-//      _ => panic!()
-//    }
-//  }
-//}
-//
-//pub trait ListArray {
-//  fn list_values(&self) -> &Box<Array>;
-//
-//  fn value_type(&self) -> &Ty;
-//}
-//
-//impl ListArray for Array {
-//  fn list_values(&self) -> &Box<Array> {
-//    match self.data {
-//      ArrayData::List { ref value_offsets, ref value_array } => value_array,
-//      _ => panic!()
-//    }
-//  }
-//
-//  fn value_type(&self) -> &Ty {
-//    match self.ty() {
-//      &Ty::List { ref value_type } => value_type,
-//      _ => panic!()
-//    }
-//  }
-//}
+
+pub struct VariableWidthElem {
+  p: *const u8,
+  len: i32
+}
+
+pub trait VariableWidthArray {
+  fn value(&self, i: i64) -> VariableWidthElem;
+
+  fn value_offset(&self, i: i64) -> i32;
+
+  fn value_len(&self, i: i64) -> i32;
+}
+
+fn value_offset(value_offsets: &*const i32, i: i64) -> i32 {
+  unsafe { *value_offsets.offset(i as isize) }
+}
+
+fn value_len(value_offsets: &*const i32, i: i64) -> i32 {
+  unsafe {
+    let i_as_isize = i as isize;
+    let pos = *value_offsets.offset(i_as_isize);
+    *value_offsets.offset(i_as_isize + 1) - pos
+  }
+}
+
+impl <'a> VariableWidthArray for Array<'a> {
+  fn value(&self, i: i64) -> VariableWidthElem {
+    match self.data {
+      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
+        let offset = i + self.offset();
+        unsafe {
+          let pos = *value_offsets.offset(i as isize);
+          let value_len = *value_offsets.offset((offset + 1) as isize) - pos;
+          VariableWidthElem {
+            p: values.offset(pos as isize),
+            len: value_len
+          }
+        }
+      },
+      ArrayData::List { ref value_offsets, ref value_array } => {
+        unimplemented!()
+      }
+      _ => panic!()
+    }
+  }
+
+  fn value_offset(&self, i: i64) -> i32 {
+    match self.data {
+      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
+        value_offset(value_offsets, i)
+      },
+      ArrayData::List { ref value_offsets, ref value_array } => {
+        value_offset(value_offsets, i)
+      },
+      _ => panic!()
+    }
+  }
+
+  fn value_len(&self, i: i64) -> i32 {
+    match self.data {
+      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
+        value_len(value_offsets, i)
+      },
+      ArrayData::List { ref value_offsets, ref value_array } => {
+        value_len(value_offsets, i)
+      },
+      _ => panic!()
+    }
+  }
+}
+
+pub trait StringArray {
+  fn string(&self, i: i64) -> String;
+}
+
+impl <T> StringArray for T where T: VariableWidthArray {
+  fn string(&self, i: i64) -> String {
+    let elem = self.value(i);
+    unsafe { String::from_raw_parts(mem::transmute::<*const u8, *mut u8>(elem.p), elem.len as usize, elem.len as usize) }
+  }
+}
+
+pub trait FixedSizeBinaryArray {
+  fn byte_width(&self) -> i32;
+
+  fn fixed_size_value(&self, i: i64) -> *const u8;
+
+  fn fixed_size_values(&self) -> *const u8;
+}
+
+impl <'a> FixedSizeBinaryArray for Array<'a> {
+  fn byte_width(&self) -> i32 {
+    match self.ty() {
+      &Ty::FixedSizeBinary { byte_width } => byte_width,
+      &Ty::Decimal { precision: _precision, scale: _scale } => 16,
+      _ => panic!("{:?} is not fixed sized binary type", self.ty())
+    }
+  }
+
+  fn fixed_size_value(&self, i: i64) -> *const u8 {
+    match self.data {
+      ArrayData::FixedSizeBinary { ref values } => unsafe { values.offset(((self.offset() + i) * self.byte_width() as i64) as isize) },
+      _ => panic!()
+    }
+  }
+
+  fn fixed_size_values(&self) -> *const u8 {
+    match self.data {
+      ArrayData::FixedSizeBinary { ref values } => unsafe { values.offset((self.offset() * self.byte_width() as i64) as isize) },
+      _ => panic!()
+    }
+  }
+}
+
+pub trait ListArray<'a> {
+  fn list_values(&self) -> &Box<Array<'a>>;
+
+  fn value_type(&self) -> &Ty;
+}
+
+impl <'a> ListArray<'a> for Array<'a> {
+  fn list_values(&self) -> &Box<Array<'a>> {
+    match self.data {
+      ArrayData::List { ref value_offsets, ref value_array } => value_array,
+      _ => panic!()
+    }
+  }
+
+  fn value_type(&self) -> &Ty {
+    match self.ty() {
+      &Ty::List { ref value_type } => value_type,
+      _ => panic!()
+    }
+  }
+}
 
 pub trait Cast {
 //  fn as_null(&self) -> &NullArray {
