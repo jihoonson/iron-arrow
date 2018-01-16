@@ -4,7 +4,7 @@ use common::ty;
 use common::ty::Ty;
 use memory_pool::MemoryPool;
 use buffer::{Buffer, PoolBuffer, ResizableBuffer, MutableBuffer};
-use array::Array;
+use array::{Array, Blob};
 
 use std::ptr;
 use std::mem;
@@ -14,7 +14,6 @@ const MIN_BUILDER_CAPACITY: i64 = 1 << 5;
 // TODO: make ArrayData and ues different interfaces for building an array and reading from it
 #[derive(Eq, PartialEq)]
 pub struct ArrayBuilder<'a> {
-  init: bool,
   ty: Ty<'a>,
   null_count: i64,
   length: i64,
@@ -25,7 +24,6 @@ pub struct ArrayBuilder<'a> {
 impl <'a> ArrayBuilder<'a> {
   pub fn null(len: i64) -> ArrayBuilder<'a> {
     ArrayBuilder {
-      init: true,
       ty: Ty::NA,
       null_count: 0,
       length: len,
@@ -34,7 +32,21 @@ impl <'a> ArrayBuilder<'a> {
     }
   }
 
-  pub fn new(ty: Ty<'a>, null_bitmap: PoolBuffer, data: PoolBuffer) -> ArrayBuilder<'a> {
+  pub fn binary(null_bitmap: PoolBuffer, lengths_and_data: PoolBuffer) -> ArrayBuilder<'a> {
+    ArrayBuilder {
+      ty: Ty::Binary,
+      null_count: 0,
+      length: 0,
+      capacity: 0,
+      data: BuilderData::Binary {
+        null_bitmap,
+        lengths_and_data,
+        cur_offset: 0
+      }
+    }
+  }
+
+  pub fn new_fixed_width(ty: Ty<'a>, null_bitmap: PoolBuffer, data: PoolBuffer) -> ArrayBuilder<'a> {
     let builder_data = match ty {
       Ty::Bool => BuilderData::Bool { null_bitmap, data },
 
@@ -64,7 +76,6 @@ impl <'a> ArrayBuilder<'a> {
     };
 
     ArrayBuilder {
-      init: false,
       ty,
       null_count: 0,
       length: 0,
@@ -73,54 +84,34 @@ impl <'a> ArrayBuilder<'a> {
     }
   }
 
+  #[inline]
   pub fn ty(&self) -> &Ty {
     &self.ty
   }
 
+  #[inline]
   pub fn null_bitmap(&self) ->Option<&PoolBuffer> {
     self.data.null_bitmap()
   }
 
+  #[inline]
   pub fn null_count(&self) -> i64 {
     self.null_count
   }
 
+  #[inline]
   pub fn len(&self) -> i64 {
     self.length
   }
 
+  #[inline]
   pub fn capacity(&self) -> i64 {
     self.capacity
   }
 
+  #[inline]
   pub fn data(&self) -> &BuilderData {
     &self.data
-  }
-
-  fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
-    match self.data.init(capacity) {
-      Ok(_) => {
-        self.init = true;
-        Ok(())
-      },
-      Err(e) => Err(e)
-    }
-  }
-
-  pub fn resize(&mut self, req_capacity: i64) -> Result<(), ArrowError> {
-    let new_capacity = ArrayBuilder::get_capacity_for_type(self.ty(), req_capacity);
-
-    if !self.init {
-      return self.init(new_capacity);
-    }
-
-    match self.data.resize(new_capacity) {
-      Ok(_) => {
-        self.capacity = new_capacity;
-        Ok(())
-      },
-      Err(e) => Err(e)
-    }
   }
 
   fn get_capacity_for_type(ty: &Ty, req_capacity: i64) -> i64 {
@@ -130,12 +121,78 @@ impl <'a> ArrayBuilder<'a> {
     }
   }
 
-  pub fn reserve(&mut self, elem: i64) -> Result<(), ArrowError> {
-    if self.length + elem > self.capacity {
-      let new_capacity = bit_util::next_power_2(self.length + elem);
-      self.resize(new_capacity)
+  fn reserve_null_bitmap(&mut self, len: i64) -> Result<(), ArrowError> {
+    let new_len = self.length + len;
+    if new_len > self.capacity {
+      match self.force_resize_null_bitmap(new_len) {
+        Ok(new_capacity) => {
+          self.capacity = new_capacity;
+          Ok(())
+        },
+        Err(e) => Err(e)
+      }
     } else {
       Ok(())
+    }
+  }
+
+  fn force_resize_null_bitmap(&mut self, new_len: i64) -> Result<i64, ArrowError> {
+    let new_capacity = bit_util::next_power_2(new_len);
+    // the capacity of null bitmap is always same with the array capacity
+    match self.data.resize_null_bitmap(new_capacity) {
+      Ok(_) => Ok(new_capacity),
+      Err(e) => Err(e)
+    }
+  }
+
+  fn reserve_bool(&mut self) -> Result<(), ArrowError> {
+    match self.reserve_null_bitmap(MIN_BUILDER_CAPACITY) {
+      Ok(_) => {
+        let new_bits = self.length - self.null_count + 1;
+        let new_bytes = bit_util::bytes_for_bits(new_bits);
+        self.data.resize_data(new_bytes)
+      },
+      Err(e) => Err(e)
+    }
+  }
+
+  fn reserve_fixed_width_type<T: Size>(&mut self, item: T) -> Result<(), ArrowError> {
+    let new_length = self.length + 1;
+    let null_bitmap_prepare_result = if new_length > self.capacity {
+      match self.force_resize_null_bitmap(new_length) {
+        Ok(new_capacity) => {
+          self.capacity = new_capacity;
+          Ok(())
+        },
+        Err(e) => Err(e)
+      }
+    } else {
+      Ok(())
+    };
+
+    match null_bitmap_prepare_result {
+      Ok(_) => self.data.resize_data(self.capacity * item.len()),
+      Err(e) => Err(e)
+    }
+  }
+
+  fn reserve_blob<T: Size>(&mut self, item: &T) -> Result<(), ArrowError> {
+    let new_length = self.length + 1;
+    let null_bitmap_prepare_result = if new_length > self.capacity {
+      match self.force_resize_null_bitmap(new_length) {
+        Ok(new_capacity) => {
+          self.capacity = new_capacity;
+          Ok(())
+        },
+        Err(e) => Err(e)
+      }
+    } else {
+      Ok(())
+    };
+
+    match null_bitmap_prepare_result {
+      Ok(_) => self.data.reserve_data(item.len()),
+      Err(e) => Err(e)
     }
   }
 
@@ -161,7 +218,7 @@ impl <'a> ArrayBuilder<'a> {
         Ok(())
       },
       _ => {
-        match self.reserve(1) {
+        match self.reserve_null_bitmap(1) {
           Ok(_) => {
             self.null_count = self.null_count + 1;
             self.length = self.length + 1;
@@ -174,13 +231,36 @@ impl <'a> ArrayBuilder<'a> {
   }
 }
 
+pub trait Size {
+  fn len(&self) -> i64;
+}
+
+macro_rules! impl_size_for_primitive_types {
+    ($ty: ty) => {
+      impl Size for $ty {
+        fn len(&self) -> i64 {
+          mem::size_of::<$ty>() as i64
+        }
+      }
+    };
+}
+
+impl_size_for_primitive_types!(u8);
+impl_size_for_primitive_types!(i8);
+impl_size_for_primitive_types!(u16);
+impl_size_for_primitive_types!(i16);
+impl_size_for_primitive_types!(u32);
+impl_size_for_primitive_types!(i32);
+impl_size_for_primitive_types!(u64);
+impl_size_for_primitive_types!(i64);
+
 pub trait Append<T> {
   fn append(&mut self, val: T) -> Result<(), ArrowError>;
 }
 
 impl <'a> Append<bool> for ArrayBuilder<'a> {
   fn append(&mut self, val: bool) -> Result<(), ArrowError> {
-    match self.reserve(1) {
+    match self.reserve_bool() {
       Ok(_) => {
         match self.data {
           BuilderData::Bool { ref mut null_bitmap, ref mut data } => {
@@ -205,7 +285,7 @@ macro_rules! impl_append_for_primitive_type {
     ($ty: ty, $builder_data: path) => {
       impl <'a> Append<$ty> for ArrayBuilder<'a> {
         fn append(&mut self, val: $ty) -> Result<(), ArrowError> {
-          match self.reserve(1) {
+          match self.reserve_fixed_width_type(val) {
             Ok(_) => {
               match self.data {
                 $builder_data { ref mut null_bitmap, ref mut data } => {
@@ -232,6 +312,39 @@ impl_append_for_primitive_type!(u32, BuilderData::UInt32);
 impl_append_for_primitive_type!(i32, BuilderData::Int32);
 impl_append_for_primitive_type!(u64, BuilderData::UInt64);
 impl_append_for_primitive_type!(i64, BuilderData::Int64);
+
+impl <'a> Append<Blob> for ArrayBuilder<'a> {
+  fn append(&mut self, val: Blob) -> Result<(), ArrowError> {
+    let reserve_result = self.reserve_blob(&val);
+    match reserve_result {
+      Ok(_) => {
+        match self.data {
+          BuilderData::Binary { ref mut null_bitmap, ref mut lengths_and_data, ref mut cur_offset } => {
+            bit_util::set_bit(null_bitmap.data_as_mut(), self.length);
+            unsafe {
+              use std::intrinsics;
+              use libc;
+              // write offset
+              *(mem::transmute::<*mut u8, *mut i32>(lengths_and_data.data_as_mut().offset(*cur_offset))) = val.len() as i32;
+              // write data
+              intrinsics::copy(val.p(), lengths_and_data.data_as_mut().offset(*cur_offset + mem::size_of::<i32>() as isize), val.len() as usize);
+//              libc::memcpy(
+//                mem::transmute::<*mut u8, *mut li bc::c_void>(lengths_and_data.data_as_mut().offset(*cur_offset + mem::size_of::<i32>() as isize)),
+//                mem::transmute::<*const u8, *const libc::c_void>(val.p()),
+//                val.len() as libc::size_t
+//              );
+            }
+            *cur_offset = *cur_offset + mem::size_of::<i32>() as isize + val.len() as isize;
+            self.length = self.length + 1;
+            Ok(())
+          },
+          _ => panic!()
+        }
+      },
+      Err(e) => Err(e)
+    }
+  }
+}
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum BuilderData {
@@ -289,8 +402,8 @@ pub enum BuilderData {
 
   Binary {
     null_bitmap: PoolBuffer,
-    offsets: PoolBuffer,
-    data: PoolBuffer
+    lengths_and_data: PoolBuffer,
+    cur_offset: isize
   },
   String {
 
@@ -346,82 +459,91 @@ pub enum BuilderData {
 }
 
 impl BuilderData {
-  fn init(&mut self, capacity: i64) -> Result<(), ArrowError> {
+  fn resize_null_bitmap(&mut self, new_capacity: i64) -> Result<(), ArrowError> {
     match self {
       &mut BuilderData::Null => Ok(()),
-      &mut BuilderData::Bool { ref mut null_bitmap, ref mut data } => {
-        match init_buffer(null_bitmap, capacity) {
-          Ok(_) => init_buffer(data, capacity),
-          Err(e) => Err(e)
-        }
-      },
-      &mut BuilderData::Int8 { ref mut null_bitmap, ref mut data } |
-      &mut BuilderData::UInt8 { ref mut null_bitmap, ref mut data } => {
-        match init_buffer(null_bitmap, capacity) {
-          Ok(_) => init_buffer(data, capacity * 8),
-          Err(e) => Err(e)
-        }
-      },
-      &mut BuilderData::Int16 { ref mut null_bitmap, ref mut data } |
-      &mut BuilderData::UInt16 { ref mut null_bitmap, ref mut data } => {
-        match init_buffer(null_bitmap, capacity) {
-          Ok(_) => init_buffer(data, capacity * 16),
-          Err(e) => Err(e)
-        }
-      },
-      &mut BuilderData::Int32 { ref mut null_bitmap, ref mut data } |
-      &mut BuilderData::UInt32 { ref mut null_bitmap, ref mut data } => {
-        match init_buffer(null_bitmap, capacity) {
-          Ok(_) => init_buffer(data, capacity * 32),
-          Err(e) => Err(e)
-        }
-      },
-      &mut BuilderData::Int64 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::Bool { ref mut null_bitmap, ref mut data }   |
+      &mut BuilderData::Int8 { ref mut null_bitmap, ref mut data }   |
+      &mut BuilderData::UInt8 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::Int16 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::UInt16 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::Int32 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::UInt32 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::Int64 { ref mut null_bitmap, ref mut data }  |
       &mut BuilderData::UInt64 { ref mut null_bitmap, ref mut data } => {
-        match init_buffer(null_bitmap, capacity) {
-          Ok(_) => init_buffer(data, capacity * 64),
-          Err(e) => Err(e)
+        let new_bytes = bit_util::bytes_for_bits(new_capacity);
+        if null_bitmap.size() != new_bytes {
+          null_bitmap.resize(new_bytes)
+        } else {
+          Ok(())
+        }
+      },
+      &mut BuilderData::Binary { ref mut null_bitmap, ref mut lengths_and_data, cur_offset } => {
+        let new_bytes = bit_util::bytes_for_bits(new_capacity);
+        if null_bitmap.size() != new_bytes {
+          null_bitmap.resize(new_bytes)
+        } else {
+          Ok(())
         }
       },
       _ => panic!()
     }
   }
 
-  fn resize(&mut self, capacity: i64) -> Result<(), ArrowError> {
+  fn reserve_data(&mut self, reserve_bytes: i64) -> Result<(), ArrowError> {
     match self {
       &mut BuilderData::Null => Ok(()),
-      &mut BuilderData::Bool { ref mut null_bitmap, ref mut data } => {
-        match resize_buffer(null_bitmap, capacity) {
-          Ok(_) => resize_buffer(data, capacity),
-          Err(e) => Err(e)
-        }
-      },
-      &mut BuilderData::Int8 { ref mut null_bitmap, ref mut data } |
-      &mut BuilderData::UInt8 { ref mut null_bitmap, ref mut data } => {
-        match resize_buffer(null_bitmap, capacity) {
-          Ok(_) => resize_buffer(data, capacity * 8),
-          Err(e) => Err(e)
-        }
-      },
-      &mut BuilderData::Int16 { ref mut null_bitmap, ref mut data } |
-      &mut BuilderData::UInt16 { ref mut null_bitmap, ref mut data } => {
-        match resize_buffer(null_bitmap, capacity) {
-          Ok(_) => resize_buffer(data, capacity * 16),
-          Err(e) => Err(e)
-        }
-      },
-      &mut BuilderData::Int32 { ref mut null_bitmap, ref mut data } |
-      &mut BuilderData::UInt32 { ref mut null_bitmap, ref mut data } => {
-        match resize_buffer(null_bitmap, capacity) {
-          Ok(_) => resize_buffer(data, capacity * 32),
-          Err(e) => Err(e)
-        }
-      },
-      &mut BuilderData::Int64 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::Bool { ref mut null_bitmap, ref mut data }   |
+      &mut BuilderData::Int8 { ref mut null_bitmap, ref mut data }   |
+      &mut BuilderData::UInt8 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::Int16 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::UInt16 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::Int32 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::UInt32 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::Int64 { ref mut null_bitmap, ref mut data }  |
       &mut BuilderData::UInt64 { ref mut null_bitmap, ref mut data } => {
-        match resize_buffer(null_bitmap, capacity) {
-          Ok(_) => resize_buffer(data, capacity * 64),
-          Err(e) => Err(e)
+        if reserve_bytes > 0 {
+          let new_bytes = reserve_bytes + data.size();
+          data.resize(new_bytes)
+        } else {
+          Ok(())
+        }
+      },
+      &mut BuilderData::Binary { ref mut null_bitmap, ref mut lengths_and_data, cur_offset } => {
+        if reserve_bytes > 0 {
+          let new_bytes = mem::size_of::<i32>() as i64 + reserve_bytes + lengths_and_data.size();
+          lengths_and_data.resize(new_bytes)
+        } else {
+          Ok(())
+        }
+      },
+      _ => panic!()
+    }
+  }
+
+  fn resize_data(&mut self, new_bytes: i64) -> Result<(), ArrowError> {
+    match self {
+      &mut BuilderData::Null => Ok(()),
+      &mut BuilderData::Bool { ref mut null_bitmap, ref mut data }   |
+      &mut BuilderData::Int8 { ref mut null_bitmap, ref mut data }   |
+      &mut BuilderData::UInt8 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::Int16 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::UInt16 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::Int32 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::UInt32 { ref mut null_bitmap, ref mut data } |
+      &mut BuilderData::Int64 { ref mut null_bitmap, ref mut data }  |
+      &mut BuilderData::UInt64 { ref mut null_bitmap, ref mut data } => {
+        if data.size() != new_bytes {
+          data.resize(new_bytes)
+        } else {
+          Ok(())
+        }
+      },
+      &mut BuilderData::Binary { ref mut null_bitmap, ref mut lengths_and_data, cur_offset } => {
+        if lengths_and_data.size() != new_bytes {
+          lengths_and_data.resize(new_bytes)
+        } else {
+          Ok(())
         }
       },
       _ => panic!()
@@ -439,22 +561,8 @@ impl BuilderData {
       &BuilderData::UInt32 { ref null_bitmap, ref data } |
       &BuilderData::Int64 { ref null_bitmap, ref data } |
       &BuilderData::UInt64 { ref null_bitmap, ref data } => Some(null_bitmap),
+      &BuilderData::Binary { ref null_bitmap, ref lengths_and_data, cur_offset } => Some(null_bitmap),
       _ => None
-    }
-  }
-
-  fn element_bit_len(&self) -> usize {
-    match self {
-      &BuilderData::Null => 0,
-      &BuilderData::Int8 { ref null_bitmap, ref data } |
-      &BuilderData::UInt8 { ref null_bitmap, ref data } => 8,
-      &BuilderData::Int16 { ref null_bitmap, ref data } |
-      &BuilderData::UInt16 { ref null_bitmap, ref data } => 16,
-      &BuilderData::Int32 { ref null_bitmap, ref data } |
-      &BuilderData::UInt32 { ref null_bitmap, ref data } => 32,
-      &BuilderData::Int64 { ref null_bitmap, ref data } |
-      &BuilderData::UInt64 { ref null_bitmap, ref data } => 64,
-      _ => panic!()
     }
   }
 }
@@ -482,8 +590,9 @@ mod tests {
   use common::ty::Ty;
   use std::sync::Arc;
   use std::cell::RefCell;
-  use builder::ArrayBuilder;
-  use array::Array;
+  use builder::{ArrayBuilder, Append};
+  use array::{Array, ArrowSlice};
+  use rand;
 
   #[test]
   fn test_null_builder() {
@@ -496,7 +605,7 @@ mod tests {
     assert_eq!(100, builder.null_count());
     assert_eq!(128, builder.capacity());
 
-    let array = Array::new(builder);
+    let array = Array::from(builder);
 
     assert_eq!(&Ty::NA, array.ty());
     assert_eq!(100, array.null_count());
@@ -506,15 +615,11 @@ mod tests {
 
   #[test]
   fn test_bool_builder() {
-    use rand;
-    use array::ArrowSlice;
-    use builder::Append;
-
     let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
     let null_bitmap = PoolBuffer::new(pool.clone());
     let data = PoolBuffer::new(pool.clone());
 
-    let mut builder = ArrayBuilder::new(Ty::Bool, null_bitmap, data);
+    let mut builder = ArrayBuilder::new_fixed_width(Ty::Bool, null_bitmap, data);
     let mut expected: Vec<bool> = Vec::new();
     for i in 0..100 {
       let val = rand::random::<bool>();
@@ -523,10 +628,10 @@ mod tests {
     }
 
     assert_eq!(100, builder.len());
-    assert_eq!(32, builder.capacity());
+    assert_eq!(256, builder.capacity());
     assert_eq!(0, builder.null_count());
 
-    let array = Array::new(builder);
+    let array = Array::from(builder);
 
     assert_eq!(&Ty::Bool, array.ty());
     assert_eq!(100, array.len());
@@ -544,15 +649,11 @@ mod tests {
       ($test_name: ident, $ty: path, $prim_ty: ty, $expected_capacity: expr) => {
         #[test]
         fn $test_name() {
-          use rand;
-          use array::ArrowSlice;
-          use builder::Append;
-
           let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
           let null_bitmap = PoolBuffer::new(pool.clone());
           let data = PoolBuffer::new(pool.clone());
 
-          let mut builder = ArrayBuilder::new($ty, null_bitmap, data);
+          let mut builder = ArrayBuilder::new_fixed_width($ty, null_bitmap, data);
           let mut expected: Vec<$prim_ty> = Vec::new();
           for i in 0..100 {
             let val = rand::random::<$prim_ty>();
@@ -564,7 +665,7 @@ mod tests {
           assert_eq!($expected_capacity, builder.capacity());
           assert_eq!(0, builder.null_count());
 
-          let array = Array::new(builder);
+          let array = Array::from(builder);
 
           assert_eq!(&$ty, array.ty());
           assert_eq!(100, array.len());
@@ -588,4 +689,62 @@ mod tests {
   test_primitive_type_builder!(test_u32_builder, Ty::UInt32, u32, 128);
   test_primitive_type_builder!(test_i64_builder, Ty::Int64, i64, 128);
   test_primitive_type_builder!(test_u64_builder, Ty::UInt64, u64, 128);
+
+  #[test]
+  fn test_binary_builder() {
+    use memory_pool::MemoryPool;
+    use builder::Size;
+    use array::Blob;
+    use array::ArrayIterator;
+
+    let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
+    let null_bitmap = PoolBuffer::new(pool.clone());
+    let data = PoolBuffer::new(pool.clone());
+
+    let mut builder = ArrayBuilder::binary(null_bitmap, data);
+    let mut expected: Vec<Blob> = Vec::new();
+    let generator = pool.clone();
+    let mut next_len = 10;
+    for i in 0..100 {
+      let len = next_len;
+      next_len = next_len + 2;
+      if next_len > 50 {
+        next_len = 10;
+      }
+      let p = generator.borrow_mut().allocate(len).unwrap();
+      unsafe {
+        use std::mem;
+        use libc;
+        let dst = mem::transmute::<*const u8, *mut libc::c_void>(p);
+        libc::memset(dst, 0, len as usize);
+        libc::memcpy(dst, mem::transmute::<*const i64, *const libc::c_void>(&len), mem::size_of::<i64>());
+      }
+      let val = Blob::new(p, len as i32);
+      builder.append(val);
+      expected.push(val);
+    }
+
+    assert_eq!(100, builder.len());
+    assert_eq!(128, builder.capacity());
+    assert_eq!(0, builder.null_count());
+
+    let array = Array::from(builder);
+
+    assert_eq!(&Ty::Binary, array.ty());
+    assert_eq!(100, array.len());
+    assert_eq!(0, array.null_count());
+//    assert_eq!(0, array.offset());
+
+    let mut iter = ArrayIterator::new(array);
+
+    for i in 0..100 {
+      assert_eq!(expected[i], iter.next().unwrap());
+    }
+
+    assert!(iter.next().is_none());
+
+    for blob in expected {
+      pool.borrow_mut().free(blob.p(), blob.len())
+    }
+  }
 }

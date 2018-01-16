@@ -4,7 +4,7 @@ use common::ty;
 use common::ty::Ty;
 use memory_pool::MemoryPool;
 use buffer::{Buffer, PoolBuffer};
-use builder::{ArrayBuilder, BuilderData};
+use builder::{ArrayBuilder, BuilderData, Size};
 
 use std::ptr;
 use std::mem;
@@ -66,9 +66,9 @@ pub enum ArrayData<'a> {
   },
 
   Binary {
-//    value_offsets: *const i32, // TODO => maybe Vec<i32>,
-//    values: *const u8
-    values: Vec<*const u8>
+    lengths_and_values: *const u8,
+    total_len: isize
+//    offsets: Vec<i32>,
   },
   String {
     value_offsets: *const i32,
@@ -145,7 +145,7 @@ impl <'a> Array<'a> {
     }
   }
 
-  pub fn new(builder: ArrayBuilder<'a>) -> Array<'a> {
+  pub fn from(builder: ArrayBuilder<'a>) -> Array<'a> {
     let data = match builder.data() {
       &BuilderData::Null => ArrayData::Null,
       &BuilderData::Bool { ref null_bitmap, ref data } => ArrayData::Bool,
@@ -189,6 +189,12 @@ impl <'a> Array<'a> {
           values : unsafe { slice::from_raw_parts(mem::transmute::<*const u8, *const i64>(data.data()), builder.len() as usize) }
         }
       },
+      &BuilderData::Binary { ref null_bitmap, ref lengths_and_data, cur_offset } => {
+        ArrayData::Binary {
+          lengths_and_values: lengths_and_data.data(),
+          total_len: cur_offset
+        }
+      },
       _ => panic!()
     };
 
@@ -196,6 +202,10 @@ impl <'a> Array<'a> {
       builder,
       data
     }
+  }
+
+  pub fn data(&self) -> &ArrayData {
+    &self.data
   }
 
   pub fn is_null(&self, i: i64) -> bool {
@@ -391,87 +401,191 @@ impl_arrow_slice!(ArrayData::UInt64, u64);
 //impl_primitive_array!(ArrayData::Float, f32);
 //impl_primitive_array!(ArrayData::Double, f64);
 
-pub struct VariableWidthElem {
+#[derive(Copy, Clone, Debug)]
+pub struct Blob {
   p: *const u8,
   len: i32
 }
 
-pub trait VariableWidthArray {
-  fn value(&self, i: i64) -> VariableWidthElem;
+impl Blob {
+  pub fn new(p: *const u8, len: i32) -> Blob {
+    Blob {
+      p,
+      len
+    }
+  }
 
-  fn value_offset(&self, i: i64) -> i32;
-
-  fn value_len(&self, i: i64) -> i32;
-}
-
-fn value_offset(value_offsets: &*const i32, i: i64) -> i32 {
-  unsafe { *value_offsets.offset(i as isize) }
-}
-
-fn value_len(value_offsets: &*const i32, i: i64) -> i32 {
-  unsafe {
-    let i_as_isize = i as isize;
-    let pos = *value_offsets.offset(i_as_isize);
-    *value_offsets.offset(i_as_isize + 1) - pos
+  pub fn p(&self) -> *const u8 {
+    self.p
   }
 }
 
-impl <'a> VariableWidthArray for Array<'a> {
-  fn value(&self, i: i64) -> VariableWidthElem {
-    match self.data {
-      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
-        let offset = i + self.offset();
+impl Size for Blob {
+  #[inline]
+  fn len(&self) -> i64 {
+    self.len as i64
+  }
+}
+
+impl PartialEq for Blob {
+  fn eq(&self, other: &Self) -> bool {
+    if self.len == other.len {
+      if self.p == other.p {
+        true
+      } else {
         unsafe {
-          let pos = *value_offsets.offset(i as isize);
-          let value_len = *value_offsets.offset((offset + 1) as isize) - pos;
-          VariableWidthElem {
-            p: values.offset(pos as isize),
-            len: value_len
+          use libc;
+          let cmp = libc::memcmp(
+            mem::transmute::<*const u8, *const libc::c_void>(self.p),
+            mem::transmute::<*const u8, *const libc::c_void>(other.p),
+            self.len as usize
+          );
+          cmp == 0
+        }
+      }
+    } else {
+      false
+    }
+  }
+}
+
+impl Eq for Blob {}
+
+//impl <'a> ArrowSlice<Blob> for Array<'a> {
+//  fn value(&self, i: i64) -> Blob {
+//    match self.data {
+//      ArrayData::Binary { ref lengths_and_data } => {
+//        unimplemented!()
+//      },
+//      _ => panic!()
+//    }
+//  }
+//
+//  fn values(&self) -> &[Blob] {
+//    match self.data {
+//      ArrayData::Binary { ref lengths_and_data } => {
+//        unimplemented!()
+//      },
+//      _ => panic!()
+//    }
+//  }
+//}
+
+pub struct ArrayIterator<'a> {
+  array: Array<'a>,
+  next: isize
+}
+
+impl <'a> ArrayIterator<'a> {
+  pub fn new(array: Array<'a>) -> ArrayIterator<'a> {
+    ArrayIterator {
+      array,
+      next: 0
+    }
+  }
+}
+
+impl <'a> Iterator for ArrayIterator<'a> {
+  type Item = Blob;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    match self.array.data() {
+      &ArrayData::Binary { ref lengths_and_values, total_len } => {
+        if self.next < total_len {
+          unsafe {
+            let p = lengths_and_values.offset(self.next);
+            let len = *(mem::transmute::<*const u8, *const i32>(p));
+            let p = p.offset(mem::size_of::<i32>() as isize);
+            self.next = self.next + len as isize + mem::size_of::<i32>() as isize;
+            Some(Blob::new(p, len))
           }
+        } else {
+          None
         }
       },
-      ArrayData::List { ref value_offsets, ref value_array } => {
-        unimplemented!()
-      }
-      _ => panic!()
-    }
-  }
-
-  fn value_offset(&self, i: i64) -> i32 {
-    match self.data {
-      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
-        value_offset(value_offsets, i)
-      },
-      ArrayData::List { ref value_offsets, ref value_array } => {
-        value_offset(value_offsets, i)
-      },
-      _ => panic!()
-    }
-  }
-
-  fn value_len(&self, i: i64) -> i32 {
-    match self.data {
-      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
-        value_len(value_offsets, i)
-      },
-      ArrayData::List { ref value_offsets, ref value_array } => {
-        value_len(value_offsets, i)
-      },
       _ => panic!()
     }
   }
 }
 
-pub trait StringArray {
-  fn string(&self, i: i64) -> String;
-}
+//pub trait VariableWidthArray {
+//  fn value(&self, i: i64) -> VariableWidthElem;
+//
+//  fn value_offset(&self, i: i64) -> i32;
+//
+//  fn value_len(&self, i: i64) -> i32;
+//}
+//
+//fn value_offset(value_offsets: &*const i32, i: i64) -> i32 {
+//  unsafe { *value_offsets.offset(i as isize) }
+//}
+//
+//fn value_len(value_offsets: &*const i32, i: i64) -> i32 {
+//  unsafe {
+//    let i_as_isize = i as isize;
+//    let pos = *value_offsets.offset(i_as_isize);
+//    *value_offsets.offset(i_as_isize + 1) - pos
+//  }
+//}
+//
+//impl <'a> VariableWidthArray for Array<'a> {
+//  fn value(&self, i: i64) -> VariableWidthElem {
+//    match self.data {
+//      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
+//        let offset = i + self.offset();
+//        unsafe {
+//          let pos = *value_offsets.offset(i as isize);
+//          let value_len = *value_offsets.offset((offset + 1) as isize) - pos;
+//          VariableWidthElem {
+//            p: values.offset(pos as isize),
+//            len: value_len
+//          }
+//        }
+//      },
+//      ArrayData::List { ref value_offsets, ref value_array } => {
+//        unimplemented!()
+//      }
+//      _ => panic!()
+//    }
+//  }
+//
+//  fn value_offset(&self, i: i64) -> i32 {
+//    match self.data {
+//      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
+//        value_offset(value_offsets, i)
+//      },
+//      ArrayData::List { ref value_offsets, ref value_array } => {
+//        value_offset(value_offsets, i)
+//      },
+//      _ => panic!()
+//    }
+//  }
+//
+//  fn value_len(&self, i: i64) -> i32 {
+//    match self.data {
+//      ArrayData::Binary { ref value_offsets, ref values } | ArrayData::String { ref value_offsets, ref values } => {
+//        value_len(value_offsets, i)
+//      },
+//      ArrayData::List { ref value_offsets, ref value_array } => {
+//        value_len(value_offsets, i)
+//      },
+//      _ => panic!()
+//    }
+//  }
+//}
 
-impl <T> StringArray for T where T: VariableWidthArray {
-  fn string(&self, i: i64) -> String {
-    let elem = self.value(i);
-    unsafe { String::from_raw_parts(mem::transmute::<*const u8, *mut u8>(elem.p), elem.len as usize, elem.len as usize) }
-  }
-}
+//pub trait StringArray {
+//  fn string(&self, i: i64) -> String;
+//}
+//
+//impl <T> StringArray for T where T: VariableWidthArray {
+//  fn string(&self, i: i64) -> String {
+//    let elem = self.value(i);
+//    unsafe { String::from_raw_parts(mem::transmute::<*const u8, *mut u8>(elem.p), elem.len as usize, elem.len as usize) }
+//  }
+//}
+
+type FixedSizedBlob = *const u8;
 
 pub trait FixedSizeBinaryArray {
   fn byte_width(&self) -> i32;
@@ -579,4 +693,31 @@ pub trait Cast {
 //  fn as_halffloat(&self) -> &HalfFloatArray {
 //    unimplemented!("Cannot cast to halffloat")
 //  }
+}
+
+#[cfg(test)]
+mod tests {
+  use memory_pool::{MemoryPool, DefaultMemoryPool};
+  use array::Blob;
+
+  #[test]
+  fn test_blob_eq() {
+    let mut pool = DefaultMemoryPool::new();
+    let p1 = pool.allocate(20).unwrap();
+    let p2 = pool.allocate(20).unwrap();
+    let val = 100;
+    unsafe {
+      use std::intrinsics;
+      use std::mem;
+      intrinsics::write_bytes(mem::transmute::<*const u8, *mut u8>(p1), 0, 20);
+      intrinsics::write_bytes(mem::transmute::<*const u8, *mut u8>(p2), 0, 20);
+      intrinsics::copy(&val, mem::transmute::<*const u8, *mut u8>(p1), 1);
+      intrinsics::copy(&val, mem::transmute::<*const u8, *mut u8>(p2), 1);
+    }
+
+    let b1 = Blob::new(p1, 20);
+    let b2 = Blob::new(p2, 20);
+
+    assert_eq!(b1, b2);
+  }
 }

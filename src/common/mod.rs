@@ -80,40 +80,8 @@ impl Clone for KeyValueMetadata {
 
 #[cfg(test)]
 mod tests {
-  use common::status::{StatusCode, ArrowError};
   use common::ty::*;
   use common::field::*;
-
-  #[test]
-  fn test_arrow_error() {
-    let arrow_error = ArrowError::out_of_memory(String::from("out of memory"));
-    assert_eq!(StatusCode::OutOfMemory, *arrow_error.code());
-    assert_eq!(String::from("out of memory"), *arrow_error.message());
-
-    let arrow_error = ArrowError::key_error(String::from("key error"));
-    assert_eq!(StatusCode::KeyError, *arrow_error.code());
-    assert_eq!(String::from("key error"), *arrow_error.message());
-
-    let arrow_error = ArrowError::type_error(String::from("type error"));
-    assert_eq!(StatusCode::TypeError, *arrow_error.code());
-    assert_eq!(String::from("type error"), *arrow_error.message());
-
-    let arrow_error = ArrowError::invalid(String::from("invalid"));
-    assert_eq!(StatusCode::Invalid, *arrow_error.code());
-    assert_eq!(String::from("invalid"), *arrow_error.message());
-
-    let arrow_error = ArrowError::io_error(String::from("io error"));
-    assert_eq!(StatusCode::IOError, *arrow_error.code());
-    assert_eq!(String::from("io error"), *arrow_error.message());
-
-    let arrow_error = ArrowError::unknown_error(String::from("unknown error"));
-    assert_eq!(StatusCode::UnknownError, *arrow_error.code());
-    assert_eq!(String::from("unknown error"), *arrow_error.message());
-
-    let arrow_error = ArrowError::not_implemented(String::from("not implemented"));
-    assert_eq!(StatusCode::NotImplemented, *arrow_error.code());
-    assert_eq!(String::from("not implemented"), *arrow_error.message());
-  }
 
   #[test]
   fn test_field() {
@@ -398,7 +366,7 @@ mod tests {
     let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
     let null_bitmap = PoolBuffer::new(pool);
     let builder = ArrayBuilder::null(10);
-    assert_eq!(false, Ty::dictionary(Box::new(Ty::int8()), Box::new(Array::new(builder))).is_integer());
+    assert_eq!(false, Ty::dictionary(Box::new(Ty::int8()), Box::new(Array::from(builder))).is_integer());
   }
 
   #[test]
@@ -440,6 +408,6 @@ mod tests {
     let pool = Arc::new(RefCell::new(DefaultMemoryPool::new()));
     let null_bitmap = PoolBuffer::new(pool);
     let builder = ArrayBuilder::null(10);
-    assert_eq!(false, Ty::dictionary(Box::new(Ty::int8()), Box::new(Array::new(builder))).is_float());
+    assert_eq!(false, Ty::dictionary(Box::new(Ty::int8()), Box::new(Array::from(builder))).is_float());
   }
 }

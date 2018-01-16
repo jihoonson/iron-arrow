@@ -39,15 +39,17 @@ impl MemoryPool for DefaultMemoryPool {
   fn allocate(&mut self, size: i64) -> Result<*const u8, ArrowError> {
     match allocate_aligned(size) {
       Ok(page) => {
-        println!("allocated memory of {} at {:?}", size, page);
+//        println!("allocated memory of {} at {:?}", size, page);
         self.bytes_allocated.fetch_add(size, Ordering::Relaxed);
 
-        let _locked = self.lock.lock().unwrap();
-        let cur_max = self.max_memory.get_mut();
-        let cur_alloc = self.bytes_allocated.load(Ordering::Relaxed);
+        {
+          let _locked = self.lock.lock().unwrap();
+          let cur_max = self.max_memory.get_mut();
+          let cur_alloc = self.bytes_allocated.load(Ordering::Relaxed);
 
-        if *cur_max < cur_alloc {
-          *cur_max = cur_alloc;
+          if *cur_max < cur_alloc {
+            *cur_max = cur_alloc;
+          }
         }
 
         Ok(page)
@@ -121,7 +123,86 @@ fn allocate_aligned(size: i64) -> Result<*const u8, ArrowError> {
     match result {
       libc::ENOMEM => Err(ArrowError::out_of_memory(format!("malloc of size {} failed", size))),
       libc::EINVAL => Err(ArrowError::invalid(format!("invalid alignment parameter: {}", ALIGNMENT))),
-      _ => Ok(mem::transmute::<*mut libc::c_void, *const u8>(page))
+      0 => Ok(mem::transmute::<*mut libc::c_void, *const u8>(page)),
+      _ => panic!("unknown allocation result: {}", result)
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use memory_pool::{DefaultMemoryPool, MemoryPool};
+
+  #[test]
+  fn test_allocate() {
+    let mut pool = DefaultMemoryPool::new();
+    match pool.allocate(100) {
+      Ok(page) => {
+        assert_eq!(100, pool.bytes_allocated());
+        assert_eq!(100, pool.max_memory());
+
+        pool.free(page, 100);
+        assert_eq!(0, pool.bytes_allocated());
+        assert_eq!(100, pool.max_memory());
+      },
+      Err(e) => panic!("{}", e.message())
+    }
+  }
+
+  #[test]
+  fn test_allocate2() {
+    let mut pool = DefaultMemoryPool::new();
+    let mut expected: Vec<(*const u8, i64)> = Vec::new();
+
+    let mut next_len = 10;
+    for i in 0..100 {
+      let len = next_len;
+      next_len = next_len + 2;
+      if next_len > 50 {
+        next_len = 10;
+      }
+
+      let p = pool.allocate(len).unwrap();
+      expected.push((p, len));
+    }
+
+    assert_eq!(2920, pool.bytes_allocated());
+    assert_eq!(2920, pool.max_memory());
+
+    for (p, len) in expected {
+      pool.free(p, len);
+    }
+
+    assert_eq!(0, pool.bytes_allocated());
+    assert_eq!(2920, pool.max_memory());
+  }
+
+  #[test]
+  fn test_reallocate() {
+    let mut pool = DefaultMemoryPool::new();
+    let page = match pool.allocate(100) {
+      Ok(page) => page,
+      Err(e) => panic!("{}", e.message())
+    };
+    assert_eq!(100, pool.bytes_allocated());
+    assert_eq!(100, pool.max_memory());
+
+    let page = match pool.reallocate(100, 200, page) {
+      Ok(page) => page,
+      Err(e) => panic!("{}", e.message())
+    };
+    assert_eq!(200, pool.bytes_allocated());
+    assert_eq!(200, pool.max_memory());
+
+    let page = match pool.reallocate(200, 50, page) {
+      Ok(page) => page,
+      Err(e) => panic!("{}", e.message())
+    };
+    assert_eq!(50, pool.bytes_allocated());
+    assert_eq!(200, pool.max_memory());
+
+    pool.free(page, 50);
+    assert_eq!(0, pool.bytes_allocated());
+    assert_eq!(200, pool.max_memory());
   }
 }
