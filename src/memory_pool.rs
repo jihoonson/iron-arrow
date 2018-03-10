@@ -67,10 +67,10 @@ impl MemoryPool for DefaultMemoryPool {
           if old_size > 0 {
             let copy_len = cmp::min(new_size, old_size) as usize;
             libc::memcpy(p_new_page, p_old_page, copy_len);
-            if new_size > old_size {
-              libc::memset(p_new_page.offset(old_size as isize), 0, (new_size - old_size) as usize);
-            }
             libc::free(p_old_page);
+          }
+          if new_size > old_size {
+            libc::memset(p_new_page.offset(old_size as isize), 0, (new_size - old_size) as usize);
           }
           self.bytes_allocated.fetch_add(new_size - old_size, Ordering::Relaxed);
 
