@@ -1,8 +1,16 @@
 [package]
 name = "iron-arrow"
 version = "0.1.0"
+description = "Rust implementation of Apache Arrow"
+homepage = "https://github.com/jihoonson/iron-arrow"
+repository = "https://github.com/jihoonson/iron-arrow"
 authors = ["Jihoon Son <jihoonson@apache.org>"]
 licence = "Apache-2.0"
+keywords = [ "arrow" ]
+include = [
+    "src/**/*.rs",
+    "Cargo.toml",
+]
 
 [lib]
 name = "arrow"
