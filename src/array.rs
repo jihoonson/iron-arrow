@@ -8,6 +8,7 @@ use builder::{ArrayBuilder, BuilderData, Size};
 
 use std::ptr;
 use std::mem;
+use std::rc::Rc;
 use std::slice;
 
 use std::fmt::{Debug, Formatter, Error};
@@ -103,18 +104,18 @@ pub enum ArrayData<'a> {
 
   List {
     value_offsets: *const i32,
-    value_array: Box<Array<'a>>
+    value_array: Rc<Array<'a>>
   },
   Struct {
-    fields: Vec<Box<Array<'a>>>
+    fields: Vec<Rc<Array<'a>>>
   },
   Union {
-    fields: Vec<Box<Array<'a>>>,
+    fields: Vec<Rc<Array<'a>>>,
     value_offsets: *const i32
   },
 
   Dictionary {
-    indices: Box<Array<'a>>
+    indices: Rc<Array<'a>>
   }
 }
 
@@ -620,13 +621,13 @@ impl <'a> FixedSizeBinaryArray for Array<'a> {
 }
 
 pub trait ListArray<'a> {
-  fn list_values(&self) -> &Box<Array<'a>>;
+  fn list_values(&self) -> &Rc<Array<'a>>;
 
   fn value_type(&self) -> &Ty;
 }
 
 impl <'a> ListArray<'a> for Array<'a> {
-  fn list_values(&self) -> &Box<Array<'a>> {
+  fn list_values(&self) -> &Rc<Array<'a>> {
     match self.data {
       ArrayData::List { ref value_offsets, ref value_array } => value_array,
       _ => panic!()
