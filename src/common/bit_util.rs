@@ -156,7 +156,7 @@ mod test {
     buffer.reserve(5);
 
     let mut data = buffer.data_as_mut();
-    assert_eq!(false, get_bit(data, 2));
+
     set_bit(data, 2);
     assert!(get_bit(data, 2));
     clear_bit(data, 2);
